@@ -1,7 +1,7 @@
 from apiclient import *
 import time
 import sys
-import lib.fonts.font5x8 as font
+import include.fonts.font5x8 as font
 from machine import Pin, I2C, reset
 
 LED: Pin = Pin("LED", Pin.OUT)
