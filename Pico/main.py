@@ -17,4 +17,3 @@ def setLED(boolOn) -> None:
         LED.off()
 
 setLED(True)
-
