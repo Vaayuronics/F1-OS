@@ -1,4 +1,3 @@
-from apiclient import *
 import time
 import sys
 import include.fonts.font5x8 as font
@@ -18,3 +17,4 @@ def setLED(boolOn) -> None:
         LED.off()
 
 setLED(True)
+
