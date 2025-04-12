@@ -43,7 +43,8 @@ class Knob:
 
     def poll(self) -> None:
         '''Wrapper for the check functions.\n
-        This function should be included in the main while loop.'''
+        This function should be included in the main while loop.\n
+        Use get functions to access the values during compute.'''
         self.check_encoder()
         self.check_switch()
 

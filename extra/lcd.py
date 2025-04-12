@@ -2,6 +2,7 @@ from machine import Pin, SoftI2C
 import lib.OLED as OLED
 from ezFont import ezFBfont
 import time
+import include.fonts.font5x8 as font
 
 class LCD:
     # Display constants
@@ -10,7 +11,7 @@ class LCD:
     OLED_STEP_HEIGHT = 8  # How much space each character takes height wise
     OLED_STEP_WIDTH = 8  # How much space each character takes width wise
     
-    def __init__(self, font, sda_pin : int, scl_pin : int):
+    def __init__(self, sda_pin : int, scl_pin : int):
         """
         Initialize the LCD display with the specified font.
         
