@@ -11,7 +11,7 @@ class JSONSerialReader:
         try:
             self.latest_json = json.loads(data.decode().strip())
         except json.JSONDecodeError:
-            print(f"[{self.ser.port}] Invalid JSON: {data!r}")
+            pass
 
     def get_latest(self):
         return self.latest_json

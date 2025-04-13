@@ -6,5 +6,6 @@
         "scminput": false,
         "python": false,
         "c": false
-    }
+    },
+    "cmake.ignoreCMakeListsMissing": true
 }
