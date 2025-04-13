@@ -5,6 +5,7 @@ import include.button as button
 import include.knob as knob
 import json
 import os
+import select  # Import the select module
 
 #Defining objects
 LED: Pin = Pin("LED", Pin.OUT)
@@ -13,6 +14,11 @@ b1 = button.Button(26)
 k = knob.Knob(20, 19, 18)
 serial_in = sys.stdin  # Use sys.stdin for reading from USB serial
 serial_out = sys.stdout # Using sys.stdout for writing back to serial
+
+# Create a poll object for checking stdin
+poll_obj = select.poll()
+poll_obj.register(serial_in, select.POLLIN)
+
 #Setting attributes
 gyro.set_function_mode(gyro_module.NDOF_MODE)
 gyro.set_power_mode(gyro_module.POWER_NORMAL)
@@ -55,25 +61,39 @@ def setLED(boolOn) -> None:
     else:
         LED.off()
 
-def read() -> dict:
-    print("Looking")
-    if serial_in in sys.stdin:  # Check if there is any data available in stdin (USB serial)
-        print("Found something")
-        incoming_data = serial_in.readline()  # Read the incoming data
-        if incoming_data:
-            try:
-                message = json.loads(incoming_data.decode().strip())
-                return message
-            except json.JSONDecodeError:
-                print("Decode error")
-    else:
-        print("Nothing")
+def read() -> dict | None:
+    """Reads JSON data from serial input if available, non-blocking."""
+    # Check if data is available with a timeout of 0 (non-blocking)
+    poll_results = poll_obj.poll(0) 
+    if poll_results:
+        # Check if the event is for stdin and is a read event
+        if poll_results[0][1] & select.POLLIN:
+            print("Found something")
+            incoming_data = serial_in.readline()
+            if incoming_data:
+                try:
+                    # Strip whitespace and attempt to decode JSON
+                    message = json.loads(incoming_data.strip())
+                    return message
+                except json.JSONDecodeError:
+                    print("Decode error")
+                except Exception as e:
+                    print(f"Error reading/decoding: {e}")
+    # No data available or error occurred
+    return None
 
-def process_command(command : dict, state : dict) -> None:
+def process_command(command : dict | None, state : dict) -> None:
+    """Processes a command dictionary."""
+    if command is None: # Handle case where no command was read
+        return 
+        
     if command.get("command") == "poll":
-        serial_out.write(json.dumps(state))
+        # Use sys.stdout.write for MicroPython serial output
+        serial_out.write(json.dumps(state) + '\n') 
+    elif command.get("command") == "save":
+        save_angles()
     else:
-        print("No Command")
+        print("Unknown or no command")
 
 def loop() -> None:
     gyro.poll()
@@ -85,11 +105,12 @@ def loop() -> None:
     state['button'] = b1.get_state()
     state['knob'] = {"count" : k.get_count(), "switch" : k.get_switch()}
     
-    process_command(read(), state)
-    save_angles()
+    command = read() # Read potential command
+    process_command(command, state) # Process command if received
 
 if __name__ == "__main__":
     print("Starting")
     angles = load_saved_angles()
     gyro.tare_gyro(angles)
-    loop()
+    while True:
+        loop()
