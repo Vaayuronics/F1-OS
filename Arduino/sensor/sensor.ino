@@ -82,19 +82,28 @@ void loop()
   float throttleAngle = readPedal(analogThrottle);
   float breakAngle = readPedal(analogBreak);
 
-  // Create a JSON document
-  JsonDocument data;
+  if (Serial.available() > 0) 
+  {
+    // Create a JSON document
+    JsonDocument message;
 
-  // Add data to the document
-  data["throttle"] = throttleAngle;
-  data["break"] = breakAngle; // If break angle is max then set throttle to 0 in main code? Cant do burn out tho :(
-  data["speed"] = readSpeed();
-  data["id"] = id;
+    deserializeJson(message, Serial.readStringUntil('\n'));  // Deserialize the incoming JSON
 
-  // Serialize the document to a string and send it over Serial
-  serializeJson(data, Serial);
-  Serial.println();
-  id++;
+    if(message["command"] == "poll")
+    {
+      // Create a JSON document
+      JsonDocument data;
+
+      // Add data to the document
+      data["throttle"] = throttleAngle;
+      data["break"] = breakAngle; // If break angle is max then set throttle to 0 in main code? Cant do burn out tho :(
+      data["speed"] = readSpeed();
+
+      // Serialize the document to a string and send it over Serial
+      serializeJson(data, Serial);
+      Serial.println();
+    }
+  }
 }
 
 
