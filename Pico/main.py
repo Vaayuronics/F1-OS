@@ -56,7 +56,9 @@ def setLED(boolOn) -> None:
         LED.off()
 
 def read() -> dict:
+    print("Looking")
     if serial_in in sys.stdin:  # Check if there is any data available in stdin (USB serial)
+        print("Found something")
         incoming_data = serial_in.readline()  # Read the incoming data
         if incoming_data:
             try:
@@ -64,6 +66,8 @@ def read() -> dict:
                 return message
             except json.JSONDecodeError:
                 print("Decode error")
+    else:
+        print("Nothing")
 
 def process_command(command : dict, state : dict) -> None:
     if command.get("command") == "poll":
@@ -85,6 +89,7 @@ def loop() -> None:
     save_angles()
 
 if __name__ == "__main__":
+    print("Starting")
     angles = load_saved_angles()
     gyro.tare_gyro(angles)
     loop()
