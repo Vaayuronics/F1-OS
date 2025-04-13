@@ -1,11 +1,4 @@
-'''
-To preserve steering angle when car turns on and off, 
-have the angle be continuously saved to a file on the system. Tare the gyro to the previous angle.
-'''
-
 from machine import Pin, I2C
-import time
-import os
 from include.bno055 import *
 
 # Power Modes
@@ -26,7 +19,6 @@ class Gyro:
         self.imu = BNO055(i2cGyro)
         
         # Load previously saved angle if exists
-        self.angle_offset = self._tare_gyro(self._load_saved_angle())
         self.lin_acc = (0,0,0)
         self.rot_acc = (0,0,0)
         self.temp = 0
@@ -70,15 +62,27 @@ class Gyro:
         Wrapped by the poll function.\n
         Returns the yaw, pitch, and roll."""
         yaw, pitch, roll = self.imu.euler()
-        # Apply the offset to the yaw (steering angle)
-        adjusted_yaw = yaw - self.angle_offset
+        # Apply the offsets
+        adjusted_yaw = yaw - self.offsets[0]
+        adjusted_pitch = pitch - self.offsets[1]
+        adjusted_roll = roll - self.offsets[2]
         # Normalize to 0-360
         if adjusted_yaw < 0:
             adjusted_yaw += 360
         elif adjusted_yaw >= 360:
             adjusted_yaw -= 360
 
-        self.angles = (adjusted_yaw, pitch, roll)
+        if adjusted_pitch < 0:
+            adjusted_pitch += 360
+        elif adjusted_pitch >= 360:
+            adjusted_pitch -= 360
+
+        if adjusted_roll < 0:
+            adjusted_roll += 360
+        elif adjusted_roll >= 360:
+            adjusted_roll -= 360
+
+        self.angles = (adjusted_yaw, adjusted_pitch, adjusted_roll)
         return self.angles
     
     def get_angles(self) -> tuple:
@@ -114,62 +118,43 @@ class Gyro:
         Modes: IMUPLUS_MODE [Only gyro and accel], NDOF_MODE [Everything].
         """
         self.imu.mode(mode)
-    
-    def get_steer(self) -> float:
-        """Returns just the calibrated steering angle (yaw)"""
-        return self.get_angles()[0]
-    
-    def _save_angle(self) -> None:
-        """Save the current steering angle to persistent storage"""
-        try:
-            angle = self.get_steer()
-            with open("steering_angle.txt", "w") as f:
-                f.write(str(angle))
-        except Exception as e:
-            print(f"Error saving angle: {e}")
-    
-    def _load_saved_angle(self) -> int:
-        """Load the previously saved steering angle"""
-        try:
-            if self._file_exists("steering_angle.txt"):
-                with open("steering_angle.txt", "r") as f:
-                    return float(f.read().strip())
-        except Exception as e:
-            print(f"Error loading angle: {e}")
-        return 0  # Default angle if no saved value
-    
-    def _tare_gyro(self, angle : int) -> int:
+        
+    def tare_gyro(self, angles : tuple) -> None:
         """
-        Tare the gyro to a specific angle.\n
-        This sets up an offset that will be applied to future compass readings.\n
-        Returns the offset.
-        """
-        current_yaw = self.imu.euler()[0]  # Get raw yaw without applying offset
+        Tare the gyro to given yaw, pitch, and roll as a tuple.\n
+        This sets up an offset that will be applied to future compass readings."""
+        current_yaw, current_pitch, current_roll = self.imu.euler()
         
         # Calculate the offset needed to make current_yaw equal to target
-        angle_offset = current_yaw - angle
+        yaw_offset = current_yaw - angles[0]
+        pitch_offset = current_pitch - angles[1]
+        roll_offset = current_roll - angles[2]
         
         # Normalize the offset
-        if angle_offset < 0:
-            angle_offset += 360
-        elif angle_offset >= 360:
-            angle_offset -= 360
-            
-        print(f"Gyro tared. Current raw: {current_yaw}°, Target: {angle}°, Offset: {angle_offset}°")
-        return angle_offset
+        if yaw_offset < 0:
+            yaw_offset += 360
+        elif yaw_offset >= 360:
+            yaw_offset -= 360
+
+        if pitch_offset < 0:
+            pitch_offset += 360
+        elif pitch_offset >= 360:
+            pitch_offset -= 360
+
+        if roll_offset < 0:
+            roll_offset += 360
+        elif roll_offset >= 360:
+            roll_offset -= 360
+
+        self.offsets = (yaw_offset, pitch_offset, roll_offset)
     
     def poll(self) -> None:
-        '''Wrapper for gryo update functions'''
+        '''Wrapper for the update functions.\n
+        This function should be included in the main while loop.\n
+        Use get functions to access the values during compute.'''
         self.update_angles()
         self.update_linear_acc()
         self.update_rotational_acc()
         self.update_temperature()
-        self._save_angle()
 
-    def _file_exists(self, filepath) -> bool:
-        """Returns if a file exists or not"""
-        try:
-            os.stat(filepath)
-            return True
-        except OSError:
-            return False
+    

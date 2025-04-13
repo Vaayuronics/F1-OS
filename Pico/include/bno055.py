@@ -31,7 +31,7 @@
 # This port copyright (c) Peter Hinch 2019
 
 from micropython import const
-from lib.bno055_base import BNO055_BASE
+from include.bno055_base import BNO055_BASE
 
 
 CONFIG_MODE = 0x00

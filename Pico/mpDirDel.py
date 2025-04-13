@@ -10,4 +10,4 @@ def rmtree(path):
             os.remove(full)
     os.rmdir(path)
 
-rmtree("lib")
+rmtree("include")

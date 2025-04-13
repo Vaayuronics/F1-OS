@@ -1,17 +1,18 @@
-#from pedal import Pedal
 import transmission
-import serial
+from jerial import JSONSerialReader
+import time
 
-ser = serial.Serial('/dev/ttyACM0', 115200, timeout = 1)
+pico = JSONSerialReader("/dev/pico")
+arduino = JSONSerialReader("/dev/arduino")
 
-def send(message : dict):
-    message = "Hello from Raspberry Pi 5!"
-    ser.write(message.encode('utf-8'))
+while True:
+    pico.poll()
+    arduino.poll()
+    print(pico.get_latest())
+    print(arduino.get_latest())
     
-    # Read response from Pico
-    if ser.in_waiting > 0:
-        response = ser.readline().decode('utf-8').strip()
-        print(f"Received: {response}")
-
-if __name__ == "__main__":
-    print("Starting System")
+    cmd = input("Command: ")
+    if(cmd == "poll pico"):
+        pico.send({"command" : "poll"})
+    if(cmd == "poll arduino"):
+        arduino.send({"command" : "poll"})
