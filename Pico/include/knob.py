@@ -25,9 +25,9 @@ class Knob:
 
         if current_clk != self.last_clk:
             if current_dt != current_clk:
-                counter += 1
+                self.counter += 1
             else:
-                counter -= 1
+                self.counter -= 1
 
         self.last_clk = current_clk
 
@@ -37,7 +37,7 @@ class Knob:
         '''Checks the sw pin to determine button position.\n
         This function is wrapped by self.poll().\n
         Returns if the button is pressed.'''
-        if not self.sw:
+        if self.sw == None:
             return False
         elif self.sw.value() == 0 and not self.button_down:
             self.button_down = True
