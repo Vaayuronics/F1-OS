@@ -1,6 +1,6 @@
-from machine import Pin
+from gpiozero import *
 import time
 
-led = Pin(17, Pin.OUT)
+led = LED(17)
 
-led.value(1)
+led.on()
