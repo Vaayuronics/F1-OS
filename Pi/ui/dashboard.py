@@ -1,21 +1,25 @@
 from PySide6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, 
-    QHBoxLayout, QLabel, QFrame, QPushButton
+    QHBoxLayout, QLabel, QFrame, QSizePolicy, QSplitter
 )
-from PySide6.QtCore import Qt
-from gauge import GaugeWidget
-from car3d import Car3DWidget
+from PySide6.QtCore import Qt, QSettings, QSize
+from ui.gauge import GaugeWidget
+from ui.car3d import Car3DWidget
+import os
 
 class F1Dashboard(QMainWindow):
-    """Main dashboard window that displays gauges, car visualization, and controls."""
+    """Main dashboard window that displays gauges and car visualization."""
     
-    def __init__(self, title="F1 Dash", stl_path=None):
+    def __init__(self, settings_file : QSettings, title="F1 Dash", model_path=None):
         """Initialize the dashboard with all widgets and layouts."""
         super().__init__()
         
         self.setWindowTitle(title)
         self.setMinimumSize(800, 600)
         self.setStyleSheet("background-color: #121212;")
+        
+        # Set up settings with relative path
+        self.settings = settings_file
         
         # Create central widget and main layout
         central_widget = QWidget()
@@ -28,64 +32,47 @@ class F1Dashboard(QMainWindow):
         title_label.setAlignment(Qt.AlignCenter)
         main_layout.addWidget(title_label)
         
-        # Create middle section with gauges and car
-        middle_layout = QHBoxLayout()
+        # Create middle section with splitters for resizing
+        self.main_splitter = QSplitter(Qt.Horizontal)
+        self.main_splitter.setChildrenCollapsible(False)  # Prevent collapsing widgets completely
         
         # RPM gauge
         self.rpm_gauge = GaugeWidget("RPM × 1000", 14)
-        self.rpm_gauge.setMinimumWidth(200)
-        middle_layout.addWidget(self.rpm_gauge)
-        
-        # 3D Car visualization
-        self.car_widget = Car3DWidget(stl_path)
-        self.car_widget.setMinimumWidth(400)
-        middle_layout.addWidget(self.car_widget)
+        self.rpm_gauge.setMinimumWidth(150)
+        self.rpm_gauge.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         
         # MPH gauge
         self.mph_gauge = GaugeWidget("MPH", 60)
-        self.mph_gauge.setMinimumWidth(200)
-        middle_layout.addWidget(self.mph_gauge)
+        self.mph_gauge.setMinimumWidth(150)
+        self.mph_gauge.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         
-        main_layout.addLayout(middle_layout)
+        # 3D Car visualization
+        self.car_widget = Car3DWidget(model_path)
+        self.car_widget.setMinimumWidth(300)
+        self.car_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         
-        # Create bottom section for controls
-        bottom_layout = QHBoxLayout()
+        # Add widgets to splitter
+        self.main_splitter.addWidget(self.rpm_gauge)
+        self.main_splitter.addWidget(self.car_widget)
+        self.main_splitter.addWidget(self.mph_gauge)
         
-        # Add animation controls
-        self.animation_active = False
-        self.animation_button = QPushButton("Start Animation")
-        self.animation_button.clicked.connect(self.toggle_animation)
-        bottom_layout.addWidget(self.animation_button)
+        # Load saved splitter sizes if available
+        self.load_splitter_settings()
         
-        main_layout.addLayout(bottom_layout)
+        main_layout.addWidget(self.main_splitter, 5)  # Give the middle section more vertical space
         
         # Add telemetry data space
-        self.future_frame = QFrame()
-        self.future_frame.setStyleSheet("background-color: #1E1E1E; border-radius: 10px;")
-        self.future_frame.setMinimumHeight(100)
+        self.telemetry_frame = QFrame()
+        self.telemetry_frame.setStyleSheet("background-color: #1E1E1E; border-radius: 10px;")
+        self.telemetry_frame.setMinimumHeight(100)
         
-        future_layout = QVBoxLayout(self.future_frame)
-        future_label = QLabel("ADDITIONAL TELEMETRY DATA SPACE")
-        future_label.setStyleSheet("color: #555; font-size: 14px;")
-        future_label.setAlignment(Qt.AlignCenter)
-        future_layout.addWidget(future_label)
+        telemetry_layout = QVBoxLayout(self.telemetry_frame)
+        telemetry_label = QLabel("TELEMETRY DATA")
+        telemetry_label.setStyleSheet("color: #555; font-size: 14px;")
+        telemetry_label.setAlignment(Qt.AlignCenter)
+        telemetry_layout.addWidget(telemetry_label)
         
-        main_layout.addWidget(self.future_frame)
-    
-    def toggle_animation(self):
-        """Toggle the car animation on/off."""
-        if self.animation_active:
-            self.car_widget.stop_animation()
-            self.animation_button.setText("Start Animation")
-        else:
-            self.car_widget.start_animation()
-            self.animation_button.setText("Stop Animation")
-        
-        self.animation_active = not self.animation_active
-    
-    def updateWheelAngle(self, angle):
-        """Update the wheel angle based on slider input."""
-        self.car_widget.setWheelAngle(angle)
+        main_layout.addWidget(self.telemetry_frame)
     
     def setRPM(self, rpm):
         """Set the RPM gauge value."""
@@ -103,23 +90,16 @@ class F1Dashboard(QMainWindow):
         """Get current speed value."""
         return self.mph_gauge.getValue()
     
-    def getWheelAngle(self):
-        """Get current steering wheel angle."""
-        return self.car_widget.getWheelAngle()
-    
     def resetValues(self):
         """Reset all dashboard values to zero/default."""
         self.rpm_gauge.setValue(0)
         self.mph_gauge.setValue(0)
-        self.car_widget.setWheelAngle(0)
-        if hasattr(self, 'wheel_slider'):
-            self.wheel_slider.setValue(0)
     
     def updateTelemetryDisplay(self, data_dict):
         """Update the telemetry data space with custom information."""
         # Remove old widgets
-        for i in reversed(range(self.future_frame.layout().count())): 
-            widget = self.future_frame.layout().itemAt(i).widget()
+        for i in reversed(range(self.telemetry_frame.layout().count())): 
+            widget = self.telemetry_frame.layout().itemAt(i).widget()
             if widget:
                 widget.setParent(None)
         
@@ -138,10 +118,42 @@ class F1Dashboard(QMainWindow):
                 row_layout.addWidget(value_widget)
                 row_layout.addStretch()
                 
-                self.future_frame.layout().addLayout(row_layout)
+                self.telemetry_frame.layout().addLayout(row_layout)
         else:
             # Add placeholder if no data
-            placeholder = QLabel("ADDITIONAL TELEMETRY DATA SPACE")
+            placeholder = QLabel("TELEMETRY DATA")
             placeholder.setStyleSheet("color: #555; font-size: 14px;")
             placeholder.setAlignment(Qt.AlignCenter)
-            self.future_frame.layout().addWidget(placeholder)
+            self.telemetry_frame.layout().addWidget(placeholder)
+    
+    def load_splitter_settings(self):
+        """Load saved splitter sizes from settings."""
+        if self.settings.contains("splitter/sizes"):
+            # Convert the saved string back to a list of integers
+            sizes_str = self.settings.value("splitter/sizes")
+            try:
+                if isinstance(sizes_str, str):
+                    # Handle string representation
+                    sizes = [int(x) for x in sizes_str.split(",")]
+                else:
+                    # Handle list representation
+                    sizes = [int(x) for x in sizes_str]
+                
+                # Apply the sizes only if we have the right number of elements
+                if len(sizes) == self.main_splitter.count():
+                    self.main_splitter.setSizes(sizes)
+                    print(f"Loaded splitter sizes: {sizes}")
+            except (ValueError, TypeError) as e:
+                print(f"Error loading splitter sizes: {e}")
+    
+    def save_splitter_settings(self):
+        """Save current splitter sizes to settings."""
+        sizes = self.main_splitter.sizes()
+        # Store as comma-separated string to avoid type issues
+        self.settings.setValue("splitter/sizes", ",".join(str(x) for x in sizes))
+        print(f"Saved splitter sizes: {sizes}")
+    
+    def closeEvent(self, event):
+        """Override close event to save settings before closing."""
+        self.save_splitter_settings()
+        super().closeEvent(event)
