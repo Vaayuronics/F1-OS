@@ -68,17 +68,21 @@ class EngineAudioPlayer:
         return end_sample >= total_samples
 
 import time
-player = EngineAudioPlayer("rev_up.wav", "rev_down.wav")
+player = EngineAudioPlayer("audio/accel.wav", "audio/decel.wav")
 
+counter = 0.0
+dur = 1
 while True:
     finished = player.play_chunk(
         rev_up=True,
-        start_time=2.0,
-        speed=1.3,
-        duration=0.1
+        start_time=counter,
+        speed=1.0,
+        duration=dur
     )
+    counter += 1.0
     
     if finished:
         print("End of file reached")
+        break
 
-    time.sleep(0.05)
+    time.sleep(dur)
