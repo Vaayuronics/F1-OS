@@ -1,4 +1,3 @@
-import transmission
 from jerial import JSONSerialReader
 import time
 
