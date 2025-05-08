@@ -8,10 +8,11 @@ import queue
 
 
 class EngineAudioPlayer:
-    def __init__(self, rev_up_path, rev_down_path):
+    def __init__(self, rev_up_path, rev_down_path, fade_duration=0.01):
         self.sr = 48000
         self.rev_up_data = self._load_and_preprocess_audio(rev_up_path)
         self.rev_down_data = self._load_and_preprocess_audio(rev_down_path)
+        self.fade_duration = fade_duration
 
         self.buffer = queue.Queue(maxsize=10)  # for smooth stream
         self.stream = sd.OutputStream(
@@ -79,6 +80,7 @@ class EngineAudioPlayer:
                 chunk = resampy.resample(chunk.T, self.sr * speed, self.sr).T
 
         try:
+            chunk = self.apply_fade(chunk, fade_duration=self.fade_duration, sr=self.sr)
             self.buffer.put_nowait(chunk)
         except queue.Full:
             pass  # drop if too much queued
@@ -88,6 +90,21 @@ class EngineAudioPlayer:
     def stop(self):
         self.stream.stop()
         self.stream.close()
+
+    def apply_fade(self, chunk, fade_duration=0.01, sr=48000):
+        fade_samples = int(fade_duration * sr)
+        if len(chunk) < 2 * fade_samples:
+            return chunk  # skip fade if chunk is too short
+        fade_in = np.linspace(0, 1, fade_samples)
+        fade_out = np.linspace(1, 0, fade_samples)
+        if chunk.ndim == 1:
+            chunk[:fade_samples] *= fade_in
+            chunk[-fade_samples:] *= fade_out
+        else:
+            chunk[:fade_samples, :] *= fade_in[:, None]
+            chunk[-fade_samples:, :] *= fade_out[:, None]
+        return chunk
+
 
 
 import time
