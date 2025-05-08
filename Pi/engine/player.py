@@ -124,4 +124,4 @@ while True:
     if done:
         print("End of audio.")
         break
-    time.sleep(duration)  # overlapping calls are OK
+    time.sleep(duration+0.02)  # overlapping calls are OK
