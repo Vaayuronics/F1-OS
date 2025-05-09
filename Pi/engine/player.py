@@ -99,16 +99,43 @@ if __name__ == "__main__":
     chunk_duration = 0.05  # Even smaller chunks for more continuous playback
     up = True
     
-    while True:
+    try:
+        start_time = time.time()
+        next_chunk_time = start_time
         
-        # Process chunk
-        done = player.play_chunk(rev_up=up, start_time=counter, speed=1.0, duration=chunk_duration)
-        time.sleep(chunk_duration)
-        
-        # Update for next iteration
-        counter += chunk_duration
-        
-        if done:
-            print("End of file reached.")
-            counter = 0.0
-            up = not up
+        while True:
+            # Calculate time until next chunk should be processed
+            current_time = time.time()
+            time_to_next = next_chunk_time - current_time
+            
+            if time_to_next > 0:
+                time.sleep(time_to_next)
+            
+            # Process chunk
+            done = player.play_chunk(rev_up=up, start_time=counter, speed=1.0, duration=chunk_duration)
+            
+            # Update for next iteration
+            counter += chunk_duration
+            next_chunk_time += chunk_duration  # Schedule next chunk at fixed intervals
+            
+            # Buffer status monitoring (less frequent to reduce overhead)
+            if counter % 1 < chunk_duration:
+                buffer_size, buffer_max = player.get_buffer_status()
+                real_time = time.time() - start_time
+                print(f"Time: {real_time:.2f}s, Counter: {counter:.2f}s, Buffer: {buffer_size}/{buffer_max}")
+                
+                # Adjust if timing is drifting
+                drift = real_time - counter
+                if abs(drift) > 0.1:  # If we're more than 100ms off
+                    print(f"Correcting timing drift of {drift:.3f}s")
+                    next_chunk_time = time.time() + chunk_duration
+            
+            if done:
+                print("End of file reached.")
+                counter = 0.0
+                up = not up
+                
+    except KeyboardInterrupt:
+        print("Stopping playback...")
+    finally:
+        player.stop()
