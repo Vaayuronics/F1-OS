@@ -7,18 +7,21 @@ import queue
 import time
 import os
 
+BASE_SR = 48000
+
 
 class EngineAudioPlayer:
     def __init__(self, rev_up_path, rev_down_path):
-        self.sr = 48000
+        self.sr = BASE_SR
         self.rev_up_data = self._load_and_preprocess_audio(rev_up_path)
         self.rev_down_data = self._load_and_preprocess_audio(rev_down_path)
 
         self.buffer = queue.Queue(maxsize=50)
         self.running = True
 
+        #Output stream is at 48000Hz but when respampling the data to speed up or slow down the sample rate changes which may cause issues
         self.stream = sd.OutputStream(
-            samplerate=self.sr,
+            samplerate=BASE_SR,
             channels=2 if self.rev_up_data.ndim == 2 else 1,
             dtype='float32',
             blocksize=1024,
@@ -38,39 +41,50 @@ class EngineAudioPlayer:
             data = data / np.iinfo(data.dtype).max
         data = data.astype(np.float32)
 
-        if sr != self.sr:
+        if sr != BASE_SR:
             if data.ndim == 1:
-                data = resampy.resample(data, sr, self.sr)
+                data = resampy.resample(data, sr, BASE_SR)
             else:
-                data = resampy.resample(data.T, sr, self.sr).T
+                data = resampy.resample(data.T, sr, BASE_SR).T
         return data
 
     def _buffer_writer(self):
         while self.running:
-            try:
+            if not self.buffer.empty():
                 chunk = self.buffer.get(timeout=0.1)
+                chunk = np.ascontiguousarray(chunk, dtype=np.float32)
                 self.stream.write(chunk)
-            except queue.Empty:
-                time.sleep(0.01)
 
-    def play_chunk(self, rev_up=True, start_time=0.0, speed=1.0, duration=0.2):
+    def play_chunk(self, rev_up, start_time, speed, duration):
+        if self.sr != self.sr * speed:
+            self.sr = self.sr * speed
+            # self.stream.close()
+            # self.stream = sd.OutputStream(
+            #     samplerate=self.sr * speed,
+            #     channels=2 if self.rev_up_data.ndim == 2 else 1,
+            #     dtype='float32',
+            #     blocksize=1024,
+            #     latency='high'
+            # )
+            # self.stream.start()
+
         data = self.rev_up_data if rev_up else self.rev_down_data
-        start_sample = int(start_time * self.sr)
+        start_sample = int(start_time * BASE_SR)
         total_samples = data.shape[0]
-        requested_samples = int(duration * speed * self.sr)
+        requested_samples = int(duration * self.sr)
         end_sample = start_sample + requested_samples
 
         if start_sample >= total_samples:
             return True
 
-        chunk = data[max(0, start_sample):min(end_sample, total_samples)]
+        chunk = data[start_sample:min(end_sample, total_samples)]
 
         # Resample for speed
-        if speed != 1.0:
-            if chunk.ndim == 1:
-                chunk = resampy.resample(chunk, self.sr * speed, self.sr)
-            else:
-                chunk = resampy.resample(chunk.T, self.sr * speed, self.sr).T
+
+        if chunk.ndim == 1:
+            chunk = resampy.resample(chunk, BASE_SR, self.sr)
+        else:
+            chunk = resampy.resample(chunk.T, BASE_SR, self.sr).T
 
         try:
             self.buffer.put_nowait(chunk)
@@ -96,7 +110,7 @@ if __name__ == "__main__":
     
     player = EngineAudioPlayer("Pi/engine/audio/accel.wav", "Pi/engine/audio/decel.wav")
     counter = 0.0
-    chunk_duration = 1  # Even smaller chunks for more continuous playback
+    chunk_duration = 0.05  # Even smaller chunks for more continuous playback
     up = True
     
     try:
@@ -125,10 +139,10 @@ if __name__ == "__main__":
                 print(f"Time: {real_time:.2f}s, Counter: {counter:.2f}s, Buffer: {buffer_size}/{buffer_max}")
                 
                 # Adjust if timing is drifting
-                # drift = real_time - counter
-                # if abs(drift) > 0.1:  # If we're more than 100ms off
-                #     print(f"Correcting timing drift of {drift:.3f}s")
-                #     next_chunk_time = time.time() + chunk_duration
+                drift = real_time - counter
+                if abs(drift) > 0.1:  # If we're more than 100ms off
+                    print(f"Correcting timing drift of {drift:.3f}s")
+                    next_chunk_time = time.time() + chunk_duration
             
             if done:
                 print("End of file reached.")
