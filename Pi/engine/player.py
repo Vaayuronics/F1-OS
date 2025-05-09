@@ -3,43 +3,42 @@ import sounddevice as sd
 import scipy.io.wavfile as wav
 import resampy
 import threading
+import queue
 import time
 import os
 
 
 class EngineAudioPlayer:
-    def __init__(self, rev_up_path, rev_down_path, fade_duration=0.01, buffer_duration=2.0):
+    def __init__(self, rev_up_path, rev_down_path, fade_duration=0.01):
         self.sr = 48000
         self.fade_duration = fade_duration
-
         self.rev_up_data = self._load_and_preprocess_audio(rev_up_path)
         self.rev_down_data = self._load_and_preprocess_audio(rev_down_path)
 
-        self.channels = 2 if self.rev_up_data.ndim == 2 else 1
-        self.buffer_samples = int(buffer_duration * self.sr)
-        self.buffer = np.zeros((self.buffer_samples, self.channels), dtype=np.float32)
-
-        self.write_pos = 0
-        self.read_pos = 0
-        self.lock = threading.Lock()
+        self.buffer = queue.Queue(maxsize=50)
         self.running = True
 
         self.stream = sd.OutputStream(
             samplerate=self.sr,
-            channels=self.channels,
+            channels=2 if self.rev_up_data.ndim == 2 else 1,
             dtype='float32',
-            callback=self._callback,
-            blocksize=1024
+            blocksize=1024,
+            latency='high'
         )
         self.stream.start()
+
+        self.writer_thread = threading.Thread(target=self._buffer_writer, daemon=True)
+        self.writer_thread.start()
 
     def _load_and_preprocess_audio(self, path):
         if not os.path.exists(path):
             raise FileNotFoundError(f"Audio file not found: {path}")
+        
         sr, data = wav.read(path)
         if data.dtype != np.float32:
             data = data / np.iinfo(data.dtype).max
         data = data.astype(np.float32)
+
         if sr != self.sr:
             if data.ndim == 1:
                 data = resampy.resample(data, sr, self.sr)
@@ -47,8 +46,8 @@ class EngineAudioPlayer:
                 data = resampy.resample(data.T, sr, self.sr).T
         return data
 
-    def _apply_fade(self, chunk):
-        fade_samples = int(self.fade_duration * self.sr)
+    def _apply_fade(self, chunk, fade_duration=0.01):
+        fade_samples = int(fade_duration * self.sr)
         if len(chunk) < 2 * fade_samples:
             return chunk
         fade_in = np.linspace(0, 1, fade_samples)
@@ -61,17 +60,13 @@ class EngineAudioPlayer:
             chunk[-fade_samples:, :] *= fade_out[:, None]
         return chunk
 
-    def _callback(self, outdata, frames, time_info, status):
-        with self.lock:
-            end_pos = (self.read_pos + frames) % self.buffer_samples
-            if self.read_pos < end_pos or end_pos == 0:
-                outdata[:] = self.buffer[self.read_pos:self.read_pos + frames]
-            else:
-                part1 = self.buffer[self.read_pos:]
-                part2 = self.buffer[:end_pos]
-                outdata[:len(part1)] = part1
-                outdata[len(part1):] = part2
-            self.read_pos = end_pos
+    def _buffer_writer(self):
+        while self.running:
+            try:
+                chunk = self.buffer.get(timeout=0.1)
+                self.stream.write(chunk)
+            except queue.Empty:
+                time.sleep(0.01)
 
     def play_chunk(self, rev_up=True, start_time=0.0, speed=1.0, duration=0.2):
         data = self.rev_up_data if rev_up else self.rev_down_data
@@ -88,56 +83,38 @@ class EngineAudioPlayer:
         # Resample for speed
         if speed != 1.0:
             if chunk.ndim == 1:
-                chunk = resampy.resample(chunk, self.sr, int(self.sr / speed))
+                chunk = resampy.resample(chunk, self.sr * speed, self.sr)
             else:
-                chunk = resampy.resample(chunk, self.sr, int(self.sr / speed))
+                chunk = resampy.resample(chunk.T, self.sr * speed, self.sr).T
 
-        # Ensure chunk is 2D
-        if chunk.ndim == 1:
-            chunk = np.expand_dims(chunk, axis=1)
+        # Apply fade to edges
+        chunk = self._apply_fade(chunk, self.fade_duration)
 
-        # Apply fade
-        chunk = self._apply_fade(chunk)
-
-        with self.lock:
-            chunk_len = chunk.shape[0]
-            end_write_pos = (self.write_pos + chunk_len) % self.buffer_samples
-            if self.write_pos < end_write_pos or end_write_pos == 0:
-                self.buffer[self.write_pos:self.write_pos + chunk_len] = chunk
-            else:
-                part1_len = self.buffer_samples - self.write_pos
-                self.buffer[self.write_pos:] = chunk[:part1_len]
-                self.buffer[:end_write_pos] = chunk[part1_len:]
-            self.write_pos = end_write_pos
+        try:
+            self.buffer.put_nowait(chunk)
+        except queue.Full:
+            pass
 
         return end_sample >= total_samples
 
     def stop(self):
         self.running = False
+        self.writer_thread.join()
         self.stream.stop()
         self.stream.close()
-
 
 import time
 
 player = EngineAudioPlayer("audio/accel.wav", "audio/decel.wav")
 counter = 0.0
-duration = 0.2
-rev = True
+duration = 1
+up = True
 
-# Pre-fill buffer
-for _ in range(10):
-    done = player.play_chunk(rev_up=rev, start_time=counter, speed=1.0, duration=duration)
+while True:
+    done = player.play_chunk(rev_up=up, start_time=counter, speed=1.0, duration=duration)
     counter += duration
-
-# Runtime loop
-try:
-    while True:
-        done = player.play_chunk(rev_up=rev, start_time=counter, speed=1.0, duration=duration)
-        counter += duration
-        if done:
-            counter = 0.0
-            rev = not rev
-        time.sleep(duration - 0.05)  # Sleep for a bit less than the duration to avoid drift
-except KeyboardInterrupt:
-    player.stop()
+    if done:
+        print("End of file reached.")
+        counter = 0.0
+        up = not up
+    time.sleep(duration - 0.01)
