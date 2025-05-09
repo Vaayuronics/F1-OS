@@ -87,8 +87,26 @@ class EngineAudioPlayer:
             else:
                 chunk = resampy.resample(chunk.T, self.sr * speed, self.sr).T
 
-        # Apply fade to edges
-        chunk = self._apply_fade(chunk, self.fade_duration)
+        # Only apply fade-in at the beginning of playback or fade-out at the end
+        if start_sample == 0:
+            # Apply fade-in only to beginning of audio
+            fade_samples = int(self.fade_duration * self.sr)
+            if len(chunk) > fade_samples:
+                fade_in = np.linspace(0, 1, fade_samples)
+                if chunk.ndim == 1:
+                    chunk[:fade_samples] *= fade_in
+                else:
+                    chunk[:fade_samples, :] *= fade_in[:, None]
+        
+        if end_sample >= total_samples:
+            # Apply fade-out only to end of audio
+            fade_samples = int(self.fade_duration * self.sr)
+            if len(chunk) > fade_samples:
+                fade_out = np.linspace(1, 0, fade_samples)
+                if chunk.ndim == 1:
+                    chunk[-fade_samples:] *= fade_out
+                else:
+                    chunk[-fade_samples:, :] *= fade_out[:, None]
 
         try:
             self.buffer.put_nowait(chunk)
@@ -103,18 +121,57 @@ class EngineAudioPlayer:
         self.stream.stop()
         self.stream.close()
 
-import time
+    def get_buffer_status(self):
+        """Return the current buffer size and maximum capacity"""
+        return self.buffer.qsize(), self.buffer.maxsize
 
-player = EngineAudioPlayer("audio/accel.wav", "audio/decel.wav")
-counter = 0.0
-duration = 1
-up = True
 
-while True:
-    done = player.play_chunk(rev_up=up, start_time=counter, speed=1.0, duration=duration)
-    counter += duration
-    if done:
-        print("End of file reached.")
-        counter = 0.0
-        up = not up
-    time.sleep(duration - 0.01)
+# Example usage - only run this if the script is executed directly
+if __name__ == "__main__":
+    import time
+    
+    player = EngineAudioPlayer("audio/accel.wav", "audio/decel.wav")
+    counter = 0.0
+    chunk_duration = 0.05  # Even smaller chunks for more continuous playback
+    up = True
+    
+    try:
+        start_time = time.time()
+        next_chunk_time = start_time
+        
+        while True:
+            # Calculate time until next chunk should be processed
+            current_time = time.time()
+            time_to_next = next_chunk_time - current_time
+            
+            if time_to_next > 0:
+                time.sleep(time_to_next)
+            
+            # Process chunk
+            done = player.play_chunk(rev_up=up, start_time=counter, speed=1.0, duration=chunk_duration)
+            
+            # Update for next iteration
+            counter += chunk_duration
+            next_chunk_time += chunk_duration  # Schedule next chunk at fixed intervals
+            
+            # Buffer status monitoring (less frequent to reduce overhead)
+            if counter % 1 < chunk_duration:
+                buffer_size, buffer_max = player.get_buffer_status()
+                real_time = time.time() - start_time
+                print(f"Time: {real_time:.2f}s, Counter: {counter:.2f}s, Buffer: {buffer_size}/{buffer_max}")
+                
+                # Adjust if timing is drifting
+                drift = real_time - counter
+                if abs(drift) > 0.1:  # If we're more than 100ms off
+                    print(f"Correcting timing drift of {drift:.3f}s")
+                    next_chunk_time = time.time() + chunk_duration
+            
+            if done:
+                print("End of file reached.")
+                counter = 0.0
+                up = not up
+                
+    except KeyboardInterrupt:
+        print("Stopping playback...")
+    finally:
+        player.stop()
