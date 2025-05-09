@@ -14,8 +14,11 @@ class EngineAudioPlayer:
         self.rev_up_data = self._load_and_preprocess_audio(rev_up_path)
         self.rev_down_data = self._load_and_preprocess_audio(rev_down_path)
 
-        self.buffer = queue.Queue(maxsize=50)
+        # Increase buffer size and add a minimum buffer threshold
+        self.buffer = queue.Queue(maxsize=100)  # Increased from 50
+        self.buffer_target = 5  # Aim to keep at least 5 chunks in buffer
         self.running = True
+        self.playback_started = False
 
         self.stream = sd.OutputStream(
             samplerate=self.sr,
@@ -48,7 +51,17 @@ class EngineAudioPlayer:
     def _buffer_writer(self):
         while self.running:
             try:
+                # Only start consuming when we have enough data
+                if not self.playback_started and self.buffer.qsize() >= self.buffer_target:
+                    self.playback_started = True
+                
+                # If buffer runs critically low, introduce a small wait to rebuild
+                if self.playback_started and self.buffer.qsize() < 2:
+                    time.sleep(0.02)  # Short delay to allow buffer to refill
+                
                 chunk = self.buffer.get(timeout=0.1)
+                # Ensure the data is contiguous before writing
+                chunk = np.ascontiguousarray(chunk)
                 self.stream.write(chunk)
             except queue.Empty:
                 time.sleep(0.01)
@@ -71,11 +84,30 @@ class EngineAudioPlayer:
                 chunk = resampy.resample(chunk, self.sr * speed, self.sr)
             else:
                 chunk = resampy.resample(chunk.T, self.sr * speed, self.sr).T
+                
+            # Apply very small fade in/out to reduce clicking
+            fade_samples = min(int(0.005 * self.sr), len(chunk) // 8)  # 5ms or 1/8 of chunk
+            if fade_samples > 0:
+                fade_in = np.linspace(0, 1, fade_samples)
+                fade_out = np.linspace(1, 0, fade_samples)
+                
+                if chunk.ndim == 1:  # Mono
+                    chunk[:fade_samples] *= fade_in
+                    chunk[-fade_samples:] *= fade_out
+                else:  # Stereo
+                    chunk[:fade_samples] *= fade_in.reshape(-1, 1)
+                    chunk[-fade_samples:] *= fade_out.reshape(-1, 1)
 
         try:
+            # Make sure data is contiguous when putting in buffer
+            chunk = np.ascontiguousarray(chunk)
             self.buffer.put_nowait(chunk)
         except queue.Full:
-            pass
+            # If buffer is full, we shouldn't discard data - try again with timeout
+            try:
+                self.buffer.put(chunk, timeout=0.05)
+            except queue.Full:
+                pass  # Now we can give up
 
         return end_sample >= total_samples
 
@@ -96,8 +128,15 @@ if __name__ == "__main__":
     
     player = EngineAudioPlayer("Pi/engine/audio/accel.wav", "Pi/engine/audio/decel.wav")
     counter = 0.0
-    chunk_duration = 1  # Even smaller chunks for more continuous playback
+    chunk_duration = 1  # Use larger chunks for more stability
     up = True
+    
+    # Pre-buffer some audio before starting
+    print("Pre-buffering audio...")
+    for i in range(10):  # Buffer 10 chunks before starting
+        player.play_chunk(rev_up=up, start_time=counter, speed=1.25, duration=chunk_duration)
+        counter += chunk_duration
+    counter = 0.0  # Reset counter
     
     try:
         start_time = time.time()
@@ -117,19 +156,7 @@ if __name__ == "__main__":
             # Update for next iteration
             counter += chunk_duration
             next_chunk_time += chunk_duration  # Schedule next chunk at fixed intervals
-            
-            # Buffer status monitoring (less frequent to reduce overhead)
-            if counter % 1 < chunk_duration:
-                buffer_size, buffer_max = player.get_buffer_status()
-                real_time = time.time() - start_time
-                print(f"Time: {real_time:.2f}s, Counter: {counter:.2f}s, Buffer: {buffer_size}/{buffer_max}")
-                
-                # Adjust if timing is drifting
-                # drift = real_time - counter
-                # if abs(drift) > 0.1:  # If we're more than 100ms off
-                #     print(f"Correcting timing drift of {drift:.3f}s")
-                #     next_chunk_time = time.time() + chunk_duration
-            
+
             if done:
                 print("End of file reached.")
                 counter = 0.0
