@@ -128,13 +128,15 @@ if __name__ == "__main__":
     
     player = EngineAudioPlayer("Pi/engine/audio/accel.wav", "Pi/engine/audio/decel.wav")
     counter = 0.0
-    chunk_duration = 1  # Use larger chunks for more stability
+    speed = 1.25
+    chunk_duration = 1.0  # Original chunk duration
+    actual_duration = chunk_duration / speed  # Actual playback duration after speed adjustment
     up = True
     
     # Pre-buffer some audio before starting
     print("Pre-buffering audio...")
     for i in range(10):  # Buffer 10 chunks before starting
-        player.play_chunk(rev_up=up, start_time=counter, speed=1.25, duration=chunk_duration)
+        player.play_chunk(rev_up=up, start_time=counter, speed=speed, duration=chunk_duration)
         counter += chunk_duration
     counter = 0.0  # Reset counter
     
@@ -151,12 +153,12 @@ if __name__ == "__main__":
                 time.sleep(time_to_next)
             
             # Process chunk
-            done = player.play_chunk(rev_up=up, start_time=counter, speed=1.25, duration=chunk_duration)
+            done = player.play_chunk(rev_up=up, start_time=counter, speed=speed, duration=chunk_duration)
             
-            # Update for next iteration
+            # Update for next iteration with the correct timing
             counter += chunk_duration
-            next_chunk_time += chunk_duration  # Schedule next chunk at fixed intervals
-
+            next_chunk_time += actual_duration  # Schedule based on actual playback duration
+            
             if done:
                 print("End of file reached.")
                 counter = 0.0
