@@ -9,9 +9,8 @@ import os
 
 
 class EngineAudioPlayer:
-    def __init__(self, rev_up_path, rev_down_path, fade_duration=0.01):
+    def __init__(self, rev_up_path, rev_down_path):
         self.sr = 48000
-        self.fade_duration = fade_duration
         self.rev_up_data = self._load_and_preprocess_audio(rev_up_path)
         self.rev_down_data = self._load_and_preprocess_audio(rev_down_path)
 
@@ -46,20 +45,6 @@ class EngineAudioPlayer:
                 data = resampy.resample(data.T, sr, self.sr).T
         return data
 
-    def _apply_fade(self, chunk, fade_duration=0.01):
-        fade_samples = int(fade_duration * self.sr)
-        if len(chunk) < 2 * fade_samples:
-            return chunk
-        fade_in = np.linspace(0, 1, fade_samples)
-        fade_out = np.linspace(1, 0, fade_samples)
-        if chunk.ndim == 1:
-            chunk[:fade_samples] *= fade_in
-            chunk[-fade_samples:] *= fade_out
-        else:
-            chunk[:fade_samples, :] *= fade_in[:, None]
-            chunk[-fade_samples:, :] *= fade_out[:, None]
-        return chunk
-
     def _buffer_writer(self):
         while self.running:
             try:
@@ -86,27 +71,6 @@ class EngineAudioPlayer:
                 chunk = resampy.resample(chunk, self.sr * speed, self.sr)
             else:
                 chunk = resampy.resample(chunk.T, self.sr * speed, self.sr).T
-
-        # Only apply fade-in at the beginning of playback or fade-out at the end
-        if start_sample == 0:
-            # Apply fade-in only to beginning of audio
-            fade_samples = int(self.fade_duration * self.sr)
-            if len(chunk) > fade_samples:
-                fade_in = np.linspace(0, 1, fade_samples)
-                if chunk.ndim == 1:
-                    chunk[:fade_samples] *= fade_in
-                else:
-                    chunk[:fade_samples, :] *= fade_in[:, None]
-        
-        if end_sample >= total_samples:
-            # Apply fade-out only to end of audio
-            fade_samples = int(self.fade_duration * self.sr)
-            if len(chunk) > fade_samples:
-                fade_out = np.linspace(1, 0, fade_samples)
-                if chunk.ndim == 1:
-                    chunk[-fade_samples:] *= fade_out
-                else:
-                    chunk[-fade_samples:, :] *= fade_out[:, None]
 
         try:
             self.buffer.put_nowait(chunk)
