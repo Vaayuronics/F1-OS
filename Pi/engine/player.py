@@ -16,16 +16,14 @@ class EngineAudioPlayer:
 
         # Increase buffer size and add a minimum buffer threshold
         self.buffer = queue.Queue(maxsize=100)  # Increased from 50
-        self.buffer_target = 5  # Aim to keep at least 5 chunks in buffer
         self.running = True
-        self.playback_started = False
 
         self.stream = sd.OutputStream(
             samplerate=self.sr,
             channels=2 if self.rev_up_data.ndim == 2 else 1,
             dtype='float32',
             blocksize=1024,
-            latency='high'
+            latency='low'
         )
         self.stream.start()
 
@@ -51,24 +49,16 @@ class EngineAudioPlayer:
     def _buffer_writer(self):
         while self.running:
             try:
-                # Only start consuming when we have enough data
-                if not self.playback_started and self.buffer.qsize() >= self.buffer_target:
-                    self.playback_started = True
-                
-                # If buffer runs critically low, introduce a small wait to rebuild
-                if self.playback_started and self.buffer.qsize() < 2:
-                    time.sleep(0.02)  # Short delay to allow buffer to refill
-                
                 chunk = self.buffer.get(timeout=0.1)
                 # Ensure the data is contiguous before writing
                 chunk = np.ascontiguousarray(chunk)
                 self.stream.write(chunk)
             except queue.Empty:
-                time.sleep(0.01)
+                continue
 
     def play_chunk(self, rev_up=True, start_time=0.0, speed=1.0, duration=0.2):
         data = self.rev_up_data if rev_up else self.rev_down_data
-        start_sample = int(start_time * self.sr)
+        start_sample = int(start_time * self.sr * speed)
         total_samples = data.shape[0]
         requested_samples = int(duration * speed * self.sr)
         end_sample = start_sample + requested_samples
@@ -128,43 +118,21 @@ if __name__ == "__main__":
     
     player = EngineAudioPlayer("Pi/engine/audio/accel.wav", "Pi/engine/audio/decel.wav")
     counter = 0.0
-    speed = 1.25
-    chunk_duration = 1.0  # Original chunk duration
-    actual_duration = chunk_duration / speed  # Actual playback duration after speed adjustment
+    dur = 1 # Use larger chunks for more stability
     up = True
-    
-    # Pre-buffer some audio before starting
-    print("Pre-buffering audio...")
-    for i in range(10):  # Buffer 10 chunks before starting
-        player.play_chunk(rev_up=up, start_time=counter, speed=speed, duration=chunk_duration)
-        counter += chunk_duration
-    counter = 0.0  # Reset counter
-    
-    try:
-        start_time = time.time()
-        next_chunk_time = start_time
+    sp = 1.25  # Speed
+    adj = 0.5 # Adjust for latency
         
-        while True:
-            # Calculate time until next chunk should be processed
-            current_time = time.time()
-            time_to_next = next_chunk_time - current_time
-            
-            if time_to_next > 0:
-                time.sleep(time_to_next)
-            
-            # Process chunk
-            done = player.play_chunk(rev_up=up, start_time=counter, speed=speed, duration=chunk_duration)
-            
-            # Update for next iteration with the correct timing
-            counter += chunk_duration
-            next_chunk_time += actual_duration  # Schedule based on actual playback duration
-            
-            if done:
-                print("End of file reached.")
-                counter = 0.0
-                up = not up
-                
-    except KeyboardInterrupt:
-        print("Stopping playback...")
-    finally:
-        player.stop()
+    while True:        
+        # Process chunk
+        done = player.play_chunk(rev_up=up, start_time=counter, speed=sp, duration=dur)
+        
+        # Update for next iteration
+        counter += dur
+
+        time.sleep(dur - adj if not sp == 1 else 0) # Sleep for the duration of the chunk minus a small buffer
+
+        if done:
+            print("End of file reached.")
+            counter = 0.0
+            up = not up
