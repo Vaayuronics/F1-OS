@@ -49,6 +49,8 @@ class EngineAudioPlayer:
     def __init__(self, rev_up_path, rev_down_path, chunk_duration, target = 1, max_buffer_size = 2):
         self.rev_up_data = self._load_and_preprocess_audio(rev_up_path)
         self.rev_down_data = self._load_and_preprocess_audio(rev_down_path)
+        # self.idle = self._load_and_preprocess_audio(idle_path)
+        # self.rev_max = self._load_and_preprocess_audio(rev_max_path)
 
         # Increase buffer size and add a minimum buffer threshold
         self.buffer = queue.Queue(maxsize=max_buffer_size)
@@ -238,6 +240,7 @@ class EngineAudioUI:
         dur = 0.05
         up = True
         self.player = EngineAudioPlayer("Pi/engine/audio/accel.wav", "Pi/engine/audio/decel.wav", dur)
+        loop = False
         
         while self.running:
             # Process chunk
