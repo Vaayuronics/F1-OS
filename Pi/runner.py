@@ -39,8 +39,9 @@ def main():
     # Load window settings with relative path
     settings = QSettings("ui/dashboard_settings.ini", QSettings.IniFormat)
     
-    dashboard = F1Dashboard(settings_file= settings, model_path=model_path)
+    dashboard = F1Dashboard(settings_file=settings, model_path=model_path)
     
+    # Order matters: first set window size, then load splitter settings
     # Set size from settings if available, otherwise use default
     if settings.contains("window/size"):
         size_str = settings.value("window/size")
@@ -62,16 +63,42 @@ def main():
             # Use default position
             pass
     
+    # Load telemetry box size if available
+    if settings.contains("telemetry/size"):
+        telemetry_size_str = settings.value("telemetry/size")
+        try:
+            width, height = map(int, telemetry_size_str.split(","))
+            dashboard.set_telemetry_box_size(width, height)
+        except:
+            # Use default telemetry box size
+            pass
+    
+    # Important: Force load splitter settings here to make sure they're applied
+    # after all other layout operations
+    dashboard.load_splitter_settings()
+    
     # Connect window resize and move events to save settings
     def on_window_geometry_changed():
         size = dashboard.size()
         pos = dashboard.pos()
         settings.setValue("window/size", f"{size.width()},{size.height()}")
         settings.setValue("window/position", f"{pos.x()},{pos.y()}")
+        
+        # Also save telemetry box size
+        telemetry_size = dashboard.get_telemetry_box_size()
+        if telemetry_size:
+            settings.setValue("telemetry/size", f"{telemetry_size[0]},{telemetry_size[1]}")
     
     dashboard.resizeEvent = lambda event: (super(F1Dashboard, dashboard).resizeEvent(event), on_window_geometry_changed())
     dashboard.moveEvent = lambda event: (super(F1Dashboard, dashboard).moveEvent(event), on_window_geometry_changed())
     
+    # Connect telemetry box resize event
+    dashboard.connect_telemetry_resize_event(on_window_geometry_changed)
+    
+    # Set test values AFTER all layout operations
+    dashboard.setThrottle(0.75)
+    dashboard.setTune(0.5)
+
     dashboard.show()
     
     sys.exit(app.exec())

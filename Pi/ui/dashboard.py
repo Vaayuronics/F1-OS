@@ -1,7 +1,5 @@
-from PySide6.QtWidgets import (
-    QMainWindow, QWidget, QVBoxLayout, 
-    QHBoxLayout, QLabel, QFrame, QSizePolicy, QSplitter
-)
+from PySide6.QtWidgets import (QMainWindow, QFrame, QSplitter, 
+                              QSizePolicy, QWidget, QVBoxLayout, QLabel, QHBoxLayout)
 from PySide6.QtCore import Qt, QSettings, QSize
 from ui.gauge import GaugeWidget
 from ui.car3d import Car3DWidget
@@ -11,7 +9,7 @@ class F1Dashboard(QMainWindow):
     """Main dashboard window that displays gauges and car visualization."""
     
     def __init__(self, settings_file : QSettings, title="F1 Dash", model_path=None):
-        """Initialize the dashboard with all widgets and layouts."""
+        """Initialize the dashboard with all widgets and layouts.""" 
         super().__init__()
         
         self.setWindowTitle(title)
@@ -20,6 +18,7 @@ class F1Dashboard(QMainWindow):
         
         # Set up settings with relative path
         self.settings = settings_file
+        self.telemetry_resize_callbacks = []
         
         # Create central widget and main layout
         central_widget = QWidget()
@@ -30,19 +29,18 @@ class F1Dashboard(QMainWindow):
         title_label = QLabel(title)
         title_label.setStyleSheet("color: white; font-size: 24px; font-weight: bold;")
         title_label.setAlignment(Qt.AlignCenter)
-        main_layout.addWidget(title_label)
         
         # Create middle section with splitters for resizing
         self.main_splitter = QSplitter(Qt.Horizontal)
         self.main_splitter.setChildrenCollapsible(False)  # Prevent collapsing widgets completely
         
         # RPM gauge
-        self.rpm_gauge = GaugeWidget("RPM × 1000", 14)
+        self.rpm_gauge = GaugeWidget("RPM × 1000", 14, "TH")
         self.rpm_gauge.setMinimumWidth(150)
         self.rpm_gauge.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         
         # MPH gauge
-        self.mph_gauge = GaugeWidget("MPH", 60)
+        self.mph_gauge = GaugeWidget("MPH", 60, "ENG_TN")
         self.mph_gauge.setMinimumWidth(150)
         self.mph_gauge.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         
@@ -59,9 +57,14 @@ class F1Dashboard(QMainWindow):
         # Load saved splitter sizes if available
         self.load_splitter_settings()
         
-        main_layout.addWidget(self.main_splitter, 5)  # Give the middle section more vertical space
+        # Create a container for the upper part of the UI (title + gauges)
+        upper_container = QWidget()
+        upper_layout = QVBoxLayout(upper_container)
+        upper_layout.setContentsMargins(0, 0, 0, 0)
+        upper_layout.addWidget(title_label)
+        upper_layout.addWidget(self.main_splitter, 5)  # Give more vertical space
         
-        # Add telemetry data space
+        # Create the telemetry frame
         self.telemetry_frame = QFrame()
         self.telemetry_frame.setStyleSheet("background-color: #1E1E1E; border-radius: 10px;")
         self.telemetry_frame.setMinimumHeight(100)
@@ -72,7 +75,35 @@ class F1Dashboard(QMainWindow):
         telemetry_label.setAlignment(Qt.AlignCenter)
         telemetry_layout.addWidget(telemetry_label)
         
-        main_layout.addWidget(self.telemetry_frame)
+        # Create a new vertical splitter to separate main content from telemetry
+        self.vertical_splitter = QSplitter(Qt.Vertical)
+        self.vertical_splitter.setHandleWidth(8)
+        self.vertical_splitter.setChildrenCollapsible(False)
+        self.vertical_splitter.addWidget(upper_container)       # Upper content first
+        self.vertical_splitter.addWidget(self.telemetry_frame)  # Telemetry frame at bottom
+        
+        # Set initial sizes for the vertical splitter (70% upper, 30% telemetry)
+        self.vertical_splitter.setSizes([700, 300])
+        
+        # Add the vertical splitter to the main layout
+        main_layout.addWidget(self.vertical_splitter)
+        
+        # Style the splitter handle to make it more visible
+        self.setStyleSheet("""
+            QSplitter::handle {
+                background-color: #555555;
+                border: 1px solid #777777;
+            }
+            QSplitter::handle:hover {
+                background-color: #666666;
+            }
+            QSplitter::handle:pressed {
+                background-color: #777777;
+            }
+        """)
+        
+        # Connect splitter's splitterMoved signal
+        self.vertical_splitter.splitterMoved.connect(self._on_telemetry_resize)
     
     def setRPM(self, rpm):
         """Set the RPM gauge value."""
@@ -90,13 +121,30 @@ class F1Dashboard(QMainWindow):
         """Get current speed value."""
         return self.mph_gauge.getValue()
     
+    def setThrottle(self, throttle):
+        """Set the throttle value (0-1 range)."""
+        self.rpm_gauge.setThrottle(throttle)
+    
+    def getThrottle(self):
+        """Get current throttle value."""
+        return self.rpm_gauge.getThrottle()
+    
+    def setTune(self, tune):
+        """Set the throttle value (0-1 range)."""
+        self.mph_gauge.setThrottle(tune)
+    
+    def getTune(self):
+        """Get current throttle value."""
+        return self.mph_gauge.getThrottle()
+    
     def resetValues(self):
         """Reset all dashboard values to zero/default."""
         self.rpm_gauge.setValue(0)
+        self.rpm_gauge.setThrottle(0)
         self.mph_gauge.setValue(0)
     
     def updateTelemetryDisplay(self, data_dict):
-        """Update the telemetry data space with custom information."""
+        """Update the telemetry data space with custom information.""" 
         # Remove old widgets
         for i in reversed(range(self.telemetry_frame.layout().count())): 
             widget = self.telemetry_frame.layout().itemAt(i).widget()
@@ -127,7 +175,7 @@ class F1Dashboard(QMainWindow):
             self.telemetry_frame.layout().addWidget(placeholder)
     
     def load_splitter_settings(self):
-        """Load saved splitter sizes from settings."""
+        """Load saved splitter sizes from settings.""" 
         if self.settings.contains("splitter/sizes"):
             # Convert the saved string back to a list of integers
             sizes_str = self.settings.value("splitter/sizes")
@@ -142,18 +190,95 @@ class F1Dashboard(QMainWindow):
                 # Apply the sizes only if we have the right number of elements
                 if len(sizes) == self.main_splitter.count():
                     self.main_splitter.setSizes(sizes)
+                    # Force the layout to update immediately
+                    self.main_splitter.refresh()
                     print(f"Loaded splitter sizes: {sizes}")
+                    return True  # Successfully loaded
             except (ValueError, TypeError) as e:
                 print(f"Error loading splitter sizes: {e}")
+        
+        return False  # Failed to load
     
     def save_splitter_settings(self):
-        """Save current splitter sizes to settings."""
+        """Save current splitter sizes to settings.""" 
         sizes = self.main_splitter.sizes()
         # Store as comma-separated string to avoid type issues
         self.settings.setValue("splitter/sizes", ",".join(str(x) for x in sizes))
         print(f"Saved splitter sizes: {sizes}")
     
     def closeEvent(self, event):
-        """Override close event to save settings before closing."""
+        """Override close event to save settings before closing.""" 
         self.save_splitter_settings()
         super().closeEvent(event)
+    
+    def set_telemetry_box_size(self, width, height):
+        """
+        Set the dimensions of the telemetry data box.
+        
+        Args:
+            width (int): The width of the telemetry box
+            height (int): The height of the telemetry box
+        """
+        if hasattr(self, 'vertical_splitter'):
+            sizes = self.vertical_splitter.sizes()
+            if len(sizes) >= 2:
+                total_height = sum(sizes)
+                # Set telemetry height (bottom widget)
+                self.vertical_splitter.setSizes([total_height - height, height])
+    
+    def get_telemetry_box_size(self):
+        """
+        Get the current dimensions of the telemetry data box.
+        
+        Returns:
+            tuple: A tuple containing (width, height) of the telemetry box
+        """
+        if hasattr(self, 'telemetry_frame') and hasattr(self, 'vertical_splitter'):
+            sizes = self.vertical_splitter.sizes()
+            if len(sizes) >= 2:
+                return (self.telemetry_frame.width(), sizes[1])  # Second widget is telemetry
+        return None
+    
+    def connect_telemetry_resize_event(self, callback):
+        """
+        Connect a callback function to be called when the telemetry box is resized.
+        
+        Args:
+            callback (function): The function to call when the telemetry box is resized
+        """
+        if callback not in self.telemetry_resize_callbacks:
+            self.telemetry_resize_callbacks.append(callback)
+    
+    def _on_telemetry_resize(self, pos, index):
+        """
+        Internal method called when the splitter is moved, triggering telemetry box resize.
+        
+        Args:
+            pos (int): The position of the splitter
+            index (int): The index of the splitter handle that was moved
+        """
+        # Execute all registered callbacks
+        for callback in self.telemetry_resize_callbacks:
+            callback()
+    
+    def reset_view(self):
+        """Reset the dashboard view to default state and make gauges symmetrical."""
+        # Reset any existing view settings
+        
+        # Make RPM and MPH gauges equal size
+        if hasattr(self, 'main_splitter'):
+            sizes = self.main_splitter.sizes()
+            if len(sizes) == 3:  # RPM, car, MPH layout
+                # Calculate total width
+                total_width = sum(sizes)
+                
+                # Calculate gauge width (equal for both)
+                gauge_width = int((total_width - sizes[1]) / 2)
+                
+                # Set sizes: [RPM gauge, car widget, MPH gauge]
+                self.main_splitter.setSizes([gauge_width, sizes[1], gauge_width])
+                
+                # Save the new splitter sizes
+                self.save_splitter_settings()
+        
+        # Reset other view elements as needed

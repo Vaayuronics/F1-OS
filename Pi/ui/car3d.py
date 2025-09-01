@@ -53,7 +53,7 @@ class Car3DWidget(QWidget):
         # Reset view button
         self.reset_button = QPushButton("Reset View")
         self.reset_button.setStyleSheet("background-color: #444; color: white; padding: 5px;")
-        self.reset_button.clicked.connect(self.reset_camera)
+        self.reset_button.clicked.connect(self._reset_camera_view)
         button_layout.addWidget(self.reset_button)
         
         container_layout.addLayout(button_layout)
@@ -268,6 +268,18 @@ class Car3DWidget(QWidget):
             self.camera.setPosition(QVector3D(15, 15, 15))
             self.camera.setViewCenter(QVector3D(0, 0, 0))
             self.camera.setUpVector(QVector3D(0, 1, 0))
+    
+    def _reset_camera_view(self):
+        """Reset the camera to the default view."""
+        # Original reset camera code
+        self.camera.setPosition(QVector3D(0, 0, 50))
+        self.camera.setViewCenter(QVector3D(0, 0, 0))
+        self.camera.setUpVector(QVector3D(0, 1, 0))
+        
+        # Also reset parent dashboard view if available
+        parent = self.window()
+        if parent and hasattr(parent, 'reset_view'):
+            parent.reset_view()
     
     def reset_camera(self):
         """Reset the camera to a default position to find the model."""
