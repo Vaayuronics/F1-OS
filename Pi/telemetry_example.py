@@ -7,8 +7,22 @@ import threading
 import random
 from ui.dashboard import F1Dashboard
 import sys
+import signal
 
 dashboard = None
+interrupted = False
+
+def signal_handler(signum, frame):
+    """Handle SIGINT (Ctrl+C) gracefully"""
+    global interrupted, dashboard
+    print("\nReceived interrupt signal. Shutting down gracefully...")
+    interrupted = True
+    if dashboard:
+        dashboard.close()  # Close the dashboard window
+    sys.exit(0)  # Exit cleanly
+
+# Set up signal handler for graceful shutdown
+signal.signal(signal.SIGINT, signal_handler)
 
 def update_dashboard_via_function():
     """Example: Update dashboard using the direct dashboard instance"""
@@ -30,9 +44,15 @@ def update_dashboard_via_function():
 
 def telemetry_update_loop():
     """Continuously update telemetry data"""
-    while True:
-        update_dashboard_via_function()
-        time.sleep(1/58)  # Update at ~58Hz to match display refresh rate
+    global interrupted
+    while not interrupted:
+        try:
+            update_dashboard_via_function()
+            time.sleep(1/58)  # Update at ~58Hz to match display refresh rate
+        except Exception as e:
+            if not interrupted:
+                print(f"Telemetry update error: {e}")
+            break
 
 def start_dashboard():
     """Start the dashboard in the main thread"""
