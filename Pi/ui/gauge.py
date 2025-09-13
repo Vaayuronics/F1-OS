@@ -178,19 +178,19 @@ class GaugeWidget(QWidget):
         value_text = f"{int(self.throttle * 100)}%"  # Just the percentage
         
         # Also adjust the text rectangle size based on the gauge size
-        # Draw label text (smaller, above)
+        # Draw label text (smaller, above) - lowered position
         label_rect = QRectF(
             center.x() - inner_radius,
-            center.y() + size * 0.02,  # Position slightly higher
+            center.y() + size * 0.08,  # Lowered from 0.02 to 0.08
             inner_radius * 2,
             inner_radius * 0.2  # Smaller height for label
         )
         painter.drawText(label_rect, Qt.AlignCenter, label_text)
         
-        # Draw value text (below the label)
+        # Draw value text (below the label) - lowered position
         value_rect = QRectF(
             center.x() - inner_radius,
-            center.y() + size * 0.08,  # Position below the label
+            center.y() + size * 0.14,  # Lowered from 0.08 to 0.14
             inner_radius * 2,
             inner_radius * 0.2  # Smaller height for value
         )
