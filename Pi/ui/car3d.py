@@ -13,7 +13,7 @@ class Car3DWidget(QWidget):
     def __init__(self, model_path=None, parent=None):
         """Initialize the 3D car widget."""
         super().__init__(parent)
-        self.setMinimumSize(400, 400)
+        self.setMinimumSize(40, 50)  # Much smaller minimum size for tiny screen
         self.model_path = model_path
         self.model_loaded = False
         self.model_scale = 1.0

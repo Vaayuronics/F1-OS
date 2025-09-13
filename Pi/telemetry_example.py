@@ -39,7 +39,6 @@ def update_dashboard_via_function():
             'wheel_rotation': random.randint(0, 360)  # Add wheel rotation
         }
         dashboard.set_data_thread_safe(data)
-        dashboard.set_data_thread_safe(data)
         print(f"Updated dashboard: RPM={data['rpm']}, Speed={data['speed']}, Gear={data['gear']}")
 
 def telemetry_update_loop():
@@ -64,6 +63,9 @@ def start_dashboard():
         settings_file_path="ui/dashboard_settings.ini",
         model_path=model_path
     )
+    
+    # Enable borderless fullscreen for Raspberry Pi
+    dashboard.enable_fullscreen()
     
     # Start telemetry updates in background thread
     telemetry_thread = threading.Thread(target=telemetry_update_loop, daemon=True)

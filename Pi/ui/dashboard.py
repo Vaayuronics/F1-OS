@@ -10,7 +10,7 @@ import sys
 class F1Dashboard(QMainWindow):
     """Main dashboard window that displays gauges and car visualization."""
     
-    def __init__(self, settings_file_path: str = None, model_path: str = None, title="F1 Dash"):
+    def __init__(self, settings_file_path: str = None, model_path: str = None, title=""):
         """Initialize the dashboard with all widgets and layouts.""" 
         # Create QApplication if it doesn't exist
         if not QApplication.instance():
@@ -23,7 +23,9 @@ class F1Dashboard(QMainWindow):
             
         super().__init__()
         
-        self.setWindowTitle(title)
+        # Main window setup - borderless fullscreen for small screens
+        self.setWindowTitle("")  # Remove title completely
+        self.setWindowFlags(Qt.FramelessWindowHint)  # Remove window frame/title bar
         self.setMinimumSize(480, 600)  # Reduced minimum width to match screen
         self.setStyleSheet("background-color: #121212;")
         
@@ -59,11 +61,6 @@ class F1Dashboard(QMainWindow):
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
         
-        # Create top section for title - smaller for small screens
-        title_label = QLabel(title)
-        title_label.setStyleSheet("color: white; font-size: 18px; font-weight: bold;")  # Reduced from 24px
-        title_label.setAlignment(Qt.AlignCenter)
-        
         # Create middle section with splitters for resizing
         self.main_splitter = QSplitter(Qt.Horizontal)
         self.main_splitter.setChildrenCollapsible(True)  # Allow collapsing for small screens
@@ -81,10 +78,10 @@ class F1Dashboard(QMainWindow):
         self.mph_gauge.setMinimumWidth(80)  # Reduced from 150 to 80
         self.mph_gauge.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         
-        # 3D Car visualization - very small minimum for small screens
+        # 3D Car visualization - ultra small minimum for tiny 480x800 screen
         self.car_widget = Car3DWidget(self.model_path)
-        self.car_widget.setMinimumWidth(60)   # Reduced from 100 to 60
-        self.car_widget.setMinimumHeight(80)  # Reduced from 150 to 80
+        self.car_widget.setMinimumWidth(40)   # Further reduced from 60 to 40
+        self.car_widget.setMinimumHeight(50)  # Further reduced from 80 to 50
         self.car_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         
         # Add widgets to splitter
@@ -103,11 +100,10 @@ class F1Dashboard(QMainWindow):
         # Load saved splitter sizes if available
         self.load_splitter_settings()
         
-        # Create a container for the upper part of the UI (title + gauges)
+        # Create a container for the upper part of the UI (just gauges)
         upper_container = QWidget()
         upper_layout = QVBoxLayout(upper_container)
         upper_layout.setContentsMargins(0, 0, 0, 0)
-        upper_layout.addWidget(title_label)
         upper_layout.addWidget(self.main_splitter, 5)  # Give more vertical space
         
         # Create the telemetry frame - very small minimum height for small screens
@@ -129,6 +125,8 @@ class F1Dashboard(QMainWindow):
         self.telemetry_scroll.setWidgetResizable(True)
         self.telemetry_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
         self.telemetry_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.telemetry_scroll.setMinimumHeight(30)  # Ensure scroll area has minimum height
+        self.telemetry_scroll.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         self.telemetry_scroll.setStyleSheet("""
             QScrollArea {
                 border: none;
@@ -260,6 +258,15 @@ class F1Dashboard(QMainWindow):
             # Update telemetry display (exclude battery since it has its own widget)
             display_data = {k: v for k, v in data.items() if k != 'battery'}
             self.updateTelemetryDisplay(display_data)
+    
+    def enable_fullscreen(self):
+        """Enable borderless fullscreen mode suitable for Raspberry Pi."""
+        # Move to top-left corner and expand to full screen
+        self.move(0, 0)
+        self.showFullScreen()
+        # Alternative: use desktop geometry for exact screen size
+        # desktop = QApplication.desktop()
+        # self.setGeometry(desktop.screenGeometry())
     
     def _setup_window_geometry(self):
         """Set up window size and position from settings."""
@@ -420,21 +427,25 @@ class F1Dashboard(QMainWindow):
         if data_dict:
             for label, value in data_dict.items():
                 row_layout = QHBoxLayout()
+                row_layout.setContentsMargins(0, 0, 0, 0)
                 
                 label_widget = QLabel(f"{label}:")
-                label_widget.setStyleSheet("color: #AAA; font-size: 14px;")
-                label_widget.setFixedWidth(120)  # Fixed width for consistent alignment
+                label_widget.setStyleSheet("color: #AAA; font-size: 12px;")  # Smaller font
+                label_widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+                label_widget.setWordWrap(True)  # Allow text wrapping
                 
                 value_widget = QLabel(f"{value}")
-                value_widget.setStyleSheet("color: white; font-size: 14px; font-weight: bold;")
+                value_widget.setStyleSheet("color: white; font-size: 12px; font-weight: bold;")  # Smaller font
+                value_widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+                value_widget.setWordWrap(True)  # Allow text wrapping
                 
-                row_layout.addWidget(label_widget)
-                row_layout.addWidget(value_widget)
-                row_layout.addStretch()
+                row_layout.addWidget(label_widget, 1)  # Give proportional space
+                row_layout.addWidget(value_widget, 1)  # Give proportional space
                 
                 # Create a widget to hold this row
                 row_widget = QWidget()
                 row_widget.setLayout(row_layout)
+                row_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
                 
                 self.telemetry_content_layout.addWidget(row_widget)
                 
@@ -443,8 +454,9 @@ class F1Dashboard(QMainWindow):
         else:
             # Add placeholder if no data
             placeholder = QLabel("No telemetry data")
-            placeholder.setStyleSheet("color: #555; font-size: 14px;")
+            placeholder.setStyleSheet("color: #555; font-size: 12px;")
             placeholder.setAlignment(Qt.AlignCenter)
+            placeholder.setWordWrap(True)
             self.telemetry_content_layout.addWidget(placeholder)
     
     def clearLayout(self, layout):
