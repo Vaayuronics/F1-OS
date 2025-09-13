@@ -224,7 +224,8 @@ class GaugeWidget(QWidget):
         else:
             center_text = f"{int(self.current_value)}"
             
-        painter.drawText(QRect(0, int(center_y - 35), self.width(), 70), 
+        # Move center number up to avoid overlap with TH/ENG TUN labels
+        painter.drawText(QRect(0, int(center_y - 50), self.width(), 70), 
                         Qt.AlignCenter, center_text)
         
         # Reset font for tick marks (reduced by half)
@@ -276,8 +277,9 @@ class GaugeWidget(QWidget):
             
             # Draw tick labels every other tick
             if i % 2 == 0:
-                text_x = center_x + (radius - 50) * math.cos(angle)  # Move further from center
-                text_y = center_y - (radius - 50) * math.sin(angle)
+                # Adjust text position for smaller font - move closer to tick marks
+                text_x = center_x + (radius - 35) * math.cos(angle)  # Reduced from 50 to 35
+                text_y = center_y - (radius - 35) * math.sin(angle)
                 
                 tick_value = int(i * self.max_value / 10)
                 
@@ -294,6 +296,6 @@ class GaugeWidget(QWidget):
                 else:
                     tick_label = f"{tick_value}"
                 
-                # Much larger rectangle to accommodate font
-                rect = QRect(int(text_x) - 50, int(text_y) - 25, 100, 50)
+                # Smaller rectangle for smaller font
+                rect = QRect(int(text_x) - 30, int(text_y) - 15, 60, 30)  # Reduced from 100x50 to 60x30
                 painter.drawText(rect, Qt.AlignCenter, tick_label)
