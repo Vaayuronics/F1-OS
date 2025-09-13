@@ -1,24 +1,57 @@
 from PySide6.QtWidgets import (QMainWindow, QFrame, QSplitter, 
-                              QSizePolicy, QWidget, QVBoxLayout, QLabel, QHBoxLayout)
+                              QSizePolicy, QWidget, QVBoxLayout, QLabel, QHBoxLayout, QMessageBox, QApplication)
 from PySide6.QtCore import Qt, QSettings, QSize
 from ui.gauge import GaugeWidget
 from ui.car3d import Car3DWidget
 import os
+import sys
 
 class F1Dashboard(QMainWindow):
     """Main dashboard window that displays gauges and car visualization."""
     
-    def __init__(self, settings_file : QSettings, title="F1 Dash", model_path=None):
+    def __init__(self, settings_file_path: str = None, model_path: str = None, title="F1 Dash"):
         """Initialize the dashboard with all widgets and layouts.""" 
+        # Create QApplication if it doesn't exist
+        if not QApplication.instance():
+            self.app = QApplication(sys.argv)
+            self.app.setStyle('Fusion')  # Use Fusion style for a more modern look
+            self.app.setApplicationName("F1-OS")
+            self.app.setOrganizationName("F1-OS")
+        else:
+            self.app = QApplication.instance()
+            
         super().__init__()
         
         self.setWindowTitle(title)
         self.setMinimumSize(800, 600)
         self.setStyleSheet("background-color: #121212;")
         
-        # Set up settings with relative path
-        self.settings = settings_file
+        # Set up settings from file path
+        if settings_file_path:
+            self.settings = QSettings(settings_file_path, QSettings.IniFormat)
+        else:
+            self.settings = QSettings("ui/dashboard_settings.ini", QSettings.IniFormat)
+        
         self.telemetry_resize_callbacks = []
+        
+        # Verify model exists and handle accordingly
+        self.model_path = None
+        if model_path:
+            model_exists = os.path.exists(model_path)
+            print(f"3D Model path: {model_path}")
+            print(f"Model exists: {model_exists}")
+            
+            if not model_exists:
+                msg = QMessageBox()
+                msg.setIcon(QMessageBox.Warning)
+                msg.setText(f"Model file not found: {model_path}")
+                msg.setWindowTitle("Model Not Found")
+                msg.setStandardButtons(QMessageBox.Ok)
+                msg.setInformativeText("Using default fallback model instead.")
+                msg.exec()
+                self.model_path = None
+            else:
+                self.model_path = model_path
         
         # Create central widget and main layout
         central_widget = QWidget()
@@ -45,7 +78,7 @@ class F1Dashboard(QMainWindow):
         self.mph_gauge.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         
         # 3D Car visualization
-        self.car_widget = Car3DWidget(model_path)
+        self.car_widget = Car3DWidget(self.model_path)
         self.car_widget.setMinimumWidth(300)
         self.car_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         
@@ -104,6 +137,77 @@ class F1Dashboard(QMainWindow):
         
         # Connect splitter's splitterMoved signal
         self.vertical_splitter.splitterMoved.connect(self._on_telemetry_resize)
+        
+        # Initialize window geometry and settings
+        self._setup_window_geometry()
+        self._connect_geometry_events()
+    
+    def run(self):
+        """Show the dashboard and run the application."""
+        self.show()
+        return self.app.exec()
+    
+    def _setup_window_geometry(self):
+        """Set up window size and position from settings."""
+        # Set size from settings if available, otherwise use default
+        if self.settings.contains("window/size"):
+            size_str = self.settings.value("window/size")
+            try:
+                width, height = map(int, size_str.split(","))
+                self.resize(width, height)
+            except:
+                self.setMinimumSize(QSize(1000, 700))
+        else:
+            self.setMinimumSize(QSize(1000, 700))
+        
+        # Set position from settings if available
+        if self.settings.contains("window/position"):
+            pos_str = self.settings.value("window/position")
+            try:
+                x, y = map(int, pos_str.split(","))
+                self.move(x, y)
+            except:
+                # Use default position
+                pass
+        
+        # Load telemetry box size if available
+        if self.settings.contains("telemetry/size"):
+            telemetry_size_str = self.settings.value("telemetry/size")
+            try:
+                width, height = map(int, telemetry_size_str.split(","))
+                self.set_telemetry_box_size(width, height)
+            except:
+                # Use default telemetry box size
+                pass
+        
+        # Important: Force load splitter settings here to make sure they're applied
+        # after all other layout operations
+        self.load_splitter_settings()
+        
+        # Load camera settings if available
+        self.load_camera_settings()
+    
+    def _connect_geometry_events(self):
+        """Connect window resize and move events to save settings."""
+        def on_window_geometry_changed():
+            size = self.size()
+            pos = self.pos()
+            self.settings.setValue("window/size", f"{size.width()},{size.height()}")
+            self.settings.setValue("window/position", f"{pos.x()},{pos.y()}")
+            
+            # Also save telemetry box size
+            telemetry_size = self.get_telemetry_box_size()
+            if telemetry_size:
+                self.settings.setValue("telemetry/size", f"{telemetry_size[0]},{telemetry_size[1]}")
+            
+            # Save camera settings when window changes (user might have moved camera)
+            self.save_camera_settings()
+        
+        self.resizeEvent = lambda event: (super(F1Dashboard, self).resizeEvent(event), on_window_geometry_changed())
+        self.moveEvent = lambda event: (super(F1Dashboard, self).moveEvent(event), on_window_geometry_changed())
+        
+        # Connect telemetry box resize event
+        self.connect_telemetry_resize_event(on_window_geometry_changed)
     
     def setRPM(self, rpm):
         """Set the RPM gauge value."""
@@ -206,9 +310,51 @@ class F1Dashboard(QMainWindow):
         self.settings.setValue("splitter/sizes", ",".join(str(x) for x in sizes))
         print(f"Saved splitter sizes: {sizes}")
     
+    def load_camera_settings(self):
+        """Load saved camera settings from configuration."""
+        if self.settings.contains("camera/position"):
+            try:
+                pos_str = self.settings.value("camera/position")
+                center_str = self.settings.value("camera/viewCenter", "0,0,0")
+                up_str = self.settings.value("camera/upVector", "0,1,0")
+                
+                pos = [float(x) for x in pos_str.split(",")]
+                center = [float(x) for x in center_str.split(",")]
+                up = [float(x) for x in up_str.split(",")]
+                
+                camera_settings = {
+                    'position': pos,
+                    'viewCenter': center,
+                    'upVector': up
+                }
+                
+                self.car_widget.set_camera_settings(camera_settings)
+                print(f"Loaded camera settings: {camera_settings}")
+                return True
+            except Exception as e:
+                print(f"Error loading camera settings: {e}")
+        return False
+    
+    def save_camera_settings(self):
+        """Save current camera settings to configuration."""
+        camera_settings = self.car_widget.get_camera_settings()
+        if camera_settings:
+            try:
+                pos = camera_settings['position']
+                center = camera_settings['viewCenter']
+                up = camera_settings['upVector']
+                
+                self.settings.setValue("camera/position", ",".join(str(x) for x in pos))
+                self.settings.setValue("camera/viewCenter", ",".join(str(x) for x in center))
+                self.settings.setValue("camera/upVector", ",".join(str(x) for x in up))
+                print(f"Saved camera settings: {camera_settings}")
+            except Exception as e:
+                print(f"Error saving camera settings: {e}")
+    
     def closeEvent(self, event):
         """Override close event to save settings before closing.""" 
         self.save_splitter_settings()
+        self.save_camera_settings()
         super().closeEvent(event)
     
     def set_telemetry_box_size(self, width, height):

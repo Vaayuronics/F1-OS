@@ -1,4 +1,4 @@
-from PySide6.QtWidgets import QWidget, QVBoxLayout, QSizePolicy, QFrame, QPushButton, QHBoxLayout
+from PySide6.QtWidgets import QWidget, QVBoxLayout, QSizePolicy, QFrame
 from PySide6.QtGui import QColor, QVector3D, QSurfaceFormat, QQuaternion
 from PySide6.QtCore import Qt, QSize, QUrl, QTimer, Signal
 from PySide6.Qt3DCore import Qt3DCore
@@ -17,8 +17,6 @@ class Car3DWidget(QWidget):
         self.model_path = model_path
         self.model_loaded = False
         self.model_scale = 1.0
-        self.focus_button = None
-        self.reset_button = None
         
         # Configure surface format for better rendering
         surface_format = QSurfaceFormat()
@@ -41,23 +39,6 @@ class Car3DWidget(QWidget):
         container_layout.setContentsMargins(0, 0, 0, 0)
         container_layout.setSpacing(0)
         
-        # Add button controls in a horizontal layout
-        button_layout = QHBoxLayout()
-        
-        # Focus button 
-        self.focus_button = QPushButton("Focus Camera")
-        self.focus_button.setStyleSheet("background-color: #444; color: white; padding: 5px;")
-        self.focus_button.clicked.connect(self.focus_on_model)
-        button_layout.addWidget(self.focus_button)
-        
-        # Reset view button
-        self.reset_button = QPushButton("Reset View")
-        self.reset_button.setStyleSheet("background-color: #444; color: white; padding: 5px;")
-        self.reset_button.clicked.connect(self._reset_camera_view)
-        button_layout.addWidget(self.reset_button)
-        
-        container_layout.addLayout(button_layout)
-        
         # Create a Qt3D window
         self.view = Qt3DExtras.Qt3DWindow()
         self.view.setFlags(Qt.Widget)  # Make sure it behaves like a regular widget
@@ -77,9 +58,6 @@ class Car3DWidget(QWidget):
         
         # Set up the 3D scene
         self.setup_scene()
-        
-        # Schedule auto-focus after model loads with a slight delay
-        QTimer.singleShot(1000, self.focus_on_model)
     
     def setup_scene(self):
         """Set up the 3D scene with the car model."""
@@ -221,7 +199,6 @@ class Car3DWidget(QWidget):
         if status == Qt3DRender.QMesh.Ready:
             print("STL mesh loaded successfully")
             self.model_loaded = True
-            self.focus_on_model()
         elif status == Qt3DRender.QMesh.Error:
             print("Error loading STL mesh")
     
@@ -230,70 +207,9 @@ class Car3DWidget(QWidget):
         if status == Qt3DRender.QSceneLoader.Ready:
             print("FBX/OBJ scene loaded successfully")
             self.model_loaded = True
-            QTimer.singleShot(500, self.focus_on_model)  # Additional delay for complex models
         elif status == Qt3DRender.QSceneLoader.Error:
             print("Error loading FBX/OBJ scene")
     
-    def focus_on_model(self):
-        """Focus the camera on the model, adjusting scale and position."""
-        if self.model_path:
-            print(f"Focusing camera on model: {self.model_path}")
-            
-            # Get file extension
-            _, ext = os.path.splitext(self.model_path)
-            ext = ext.lower()
-            
-            # Handle different model types
-            if ext == '.stl':
-                # STL files are often in mm, scale and position camera accordingly
-                self.camera.setPosition(QVector3D(0, 0, 30))
-                self.camera.setViewCenter(QVector3D(0, 0, 0))
-                self.camera.setUpVector(QVector3D(0, 1, 0))
-                
-            elif ext in ['.fbx', '.obj']:
-                # FBX/OBJ models often need a different camera setup
-                # Position the camera to view the model from a good angle
-                self.camera.setPosition(QVector3D(10, 10, 30))
-                self.camera.setViewCenter(QVector3D(0, 0, 0))
-                self.camera.setUpVector(QVector3D(0, 1, 0))
-                
-                # Try different scales for FBX models
-                current_scale = self.modelTransform.scale()
-                # If the model is too small, try scaling it up
-                if current_scale < 0.1 or current_scale > 100:
-                    self.modelTransform.setScale(1.0)
-                    print(f"Reset scale to 1.0 for FBX model")
-        else:
-            # Default view for the fallback model
-            self.camera.setPosition(QVector3D(15, 15, 15))
-            self.camera.setViewCenter(QVector3D(0, 0, 0))
-            self.camera.setUpVector(QVector3D(0, 1, 0))
-    
-    def _reset_camera_view(self):
-        """Reset the camera to the default view."""
-        # Original reset camera code
-        self.camera.setPosition(QVector3D(0, 0, 50))
-        self.camera.setViewCenter(QVector3D(0, 0, 0))
-        self.camera.setUpVector(QVector3D(0, 1, 0))
-        
-        # Also reset parent dashboard view if available
-        parent = self.window()
-        if parent and hasattr(parent, 'reset_view'):
-            parent.reset_view()
-    
-    def reset_camera(self):
-        """Reset the camera to a default position to find the model."""
-        print("Resetting camera view")
-        
-        # Move camera far enough to see the entire scene
-        self.camera.setPosition(QVector3D(0, 0, 50))
-        self.camera.setViewCenter(QVector3D(0, 0, 0))
-        self.camera.setUpVector(QVector3D(0, 1, 0))
-        
-        # Reset model scale if needed
-        self.modelTransform.setScale(1.0)
-        print(f"Reset model scale to 1.0")
-
     def setWheelAngle(self, angle):
         """Placeholder for steering wheel angle."""
         pass
@@ -301,3 +217,36 @@ class Car3DWidget(QWidget):
     def getWheelAngle(self):
         """Placeholder for getting wheel angle."""
         return 0
+    
+    def get_camera_settings(self):
+        """Get current camera position, view center, and up vector."""
+        if hasattr(self, 'camera'):
+            pos = self.camera.position()
+            center = self.camera.viewCenter()
+            up = self.camera.upVector()
+            return {
+                'position': [pos.x(), pos.y(), pos.z()],
+                'viewCenter': [center.x(), center.y(), center.z()],
+                'upVector': [up.x(), up.y(), up.z()]
+            }
+        return None
+    
+    def set_camera_settings(self, settings):
+        """Set camera position, view center, and up vector from settings."""
+        if hasattr(self, 'camera') and settings:
+            try:
+                if 'position' in settings:
+                    pos = settings['position']
+                    self.camera.setPosition(QVector3D(pos[0], pos[1], pos[2]))
+                
+                if 'viewCenter' in settings:
+                    center = settings['viewCenter']
+                    self.camera.setViewCenter(QVector3D(center[0], center[1], center[2]))
+                
+                if 'upVector' in settings:
+                    up = settings['upVector']
+                    self.camera.setUpVector(QVector3D(up[0], up[1], up[2]))
+                    
+                print(f"Loaded camera settings: pos={settings.get('position')}, center={settings.get('viewCenter')}")
+            except Exception as e:
+                print(f"Error setting camera settings: {e}")
