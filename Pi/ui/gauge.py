@@ -203,10 +203,10 @@ class GaugeWidget(QWidget):
         painter.setBrush(Qt.NoBrush)
         painter.drawEllipse(QPoint(int(center_x), int(center_y)), int(radius), int(radius))
         
-        # Draw gauge title
+        # Draw gauge title (reduced by half)
         painter.setPen(QColor(200, 200, 200))
         title_font = painter.font()
-        title_font.setPointSize(16)  # Increased from default
+        title_font.setPointSize(8)  # Reduced from 16 to 8 (half)
         painter.setFont(title_font)
         painter.drawText(QRect(0, int(center_y + radius/2), self.width(), 30), 
                         Qt.AlignCenter, self.title)
@@ -227,9 +227,9 @@ class GaugeWidget(QWidget):
         painter.drawText(QRect(0, int(center_y - 35), self.width(), 70), 
                         Qt.AlignCenter, center_text)
         
-        # Reset font for tick marks (reduced by 8 points)
+        # Reset font for tick marks (reduced by half)
         tick_font = painter.font()
-        tick_font.setPointSize(24)  # Reduced from 32 to 24
+        tick_font.setPointSize(12)  # Reduced from 24 to 12 (half)
         tick_font.setBold(True)     # Keep bold for visibility
         painter.setFont(tick_font)
         

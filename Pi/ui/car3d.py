@@ -13,7 +13,7 @@ class Car3DWidget(QWidget):
     def __init__(self, model_path=None, parent=None):
         """Initialize the 3D car widget."""
         super().__init__(parent)
-        self.setMinimumSize(40, 50)  # Much smaller minimum size for tiny screen
+        self.setMinimumSize(20, 30)  # Ultra small minimum size for tiny screen
         self.model_path = model_path
         self.model_loaded = False
         self.model_scale = 1.0
@@ -39,14 +39,16 @@ class Car3DWidget(QWidget):
         container_layout.setContentsMargins(0, 0, 0, 0)
         container_layout.setSpacing(0)
         
-        # Create a Qt3D window
+        # Create a Qt3D window with minimal size constraints
         self.view = Qt3DExtras.Qt3DWindow()
         self.view.setFlags(Qt.Widget)  # Make sure it behaves like a regular widget
         
         self.container = QWidget.createWindowContainer(self.view, container_frame)
         self.container.setFocusPolicy(Qt.StrongFocus)  # Allow keyboard focus
-        self.container.setMinimumSize(QSize(300, 300))
+        self.container.setMinimumSize(QSize(20, 30))  # Even smaller minimum for ultra-compact view
         self.container.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
+        # Force the container to respect very small sizes
+        self.container.resize(40, 50)
         
         container_layout.addWidget(self.container)
         layout.addWidget(container_frame)

@@ -78,10 +78,10 @@ class F1Dashboard(QMainWindow):
         self.mph_gauge.setMinimumWidth(80)  # Reduced from 150 to 80
         self.mph_gauge.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         
-        # 3D Car visualization - ultra small minimum for tiny 480x800 screen
+        # 3D Car visualization - ultra compact minimum for tiny 480x800 screen
         self.car_widget = Car3DWidget(self.model_path)
-        self.car_widget.setMinimumWidth(40)   # Further reduced from 60 to 40
-        self.car_widget.setMinimumHeight(50)  # Further reduced from 80 to 50
+        self.car_widget.setMinimumWidth(20)   # Ultra small minimum (was 40)
+        self.car_widget.setMinimumHeight(30)  # Ultra small minimum (was 50)
         self.car_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         
         # Add widgets to splitter
@@ -91,11 +91,11 @@ class F1Dashboard(QMainWindow):
         
         # Set stretch factors to prevent linked dragging behavior
         self.main_splitter.setStretchFactor(0, 1)  # RPM gauge - fixed proportion
-        self.main_splitter.setStretchFactor(1, 2)  # 3D widget - more flexible
+        self.main_splitter.setStretchFactor(1, 1)  # 3D widget - reduced flexibility
         self.main_splitter.setStretchFactor(2, 1)  # MPH gauge - fixed proportion
         
-        # Set initial sizes better suited for small screen (480px width)
-        self.main_splitter.setSizes([100, 180, 100])  # More compact: smaller gauges and center
+        # Set initial sizes better suited for small screen (480px width) - much smaller 3D area
+        self.main_splitter.setSizes([120, 80, 120])  # Much smaller center area for 3D view
         
         # Load saved splitter sizes if available
         self.load_splitter_settings()
@@ -423,6 +423,11 @@ class F1Dashboard(QMainWindow):
             elif child.layout():
                 self.clearLayout(child.layout())
         
+        # Calculate dynamic font size based on telemetry scroll area width
+        scroll_width = self.telemetry_scroll.width()
+        # Scale font size: 8px minimum, 14px maximum, based on width
+        base_font_size = max(8, min(14, int(scroll_width / 30)))
+        
         # Add new data rows
         if data_dict:
             for label, value in data_dict.items():
@@ -430,12 +435,12 @@ class F1Dashboard(QMainWindow):
                 row_layout.setContentsMargins(0, 0, 0, 0)
                 
                 label_widget = QLabel(f"{label}:")
-                label_widget.setStyleSheet("color: #AAA; font-size: 12px;")  # Smaller font
+                label_widget.setStyleSheet(f"color: #AAA; font-size: {base_font_size}px;")
                 label_widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
                 label_widget.setWordWrap(True)  # Allow text wrapping
                 
                 value_widget = QLabel(f"{value}")
-                value_widget.setStyleSheet("color: white; font-size: 12px; font-weight: bold;")  # Smaller font
+                value_widget.setStyleSheet(f"color: white; font-size: {base_font_size}px; font-weight: bold;")
                 value_widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
                 value_widget.setWordWrap(True)  # Allow text wrapping
                 
@@ -454,7 +459,7 @@ class F1Dashboard(QMainWindow):
         else:
             # Add placeholder if no data
             placeholder = QLabel("No telemetry data")
-            placeholder.setStyleSheet("color: #555; font-size: 12px;")
+            placeholder.setStyleSheet(f"color: #555; font-size: {base_font_size}px;")
             placeholder.setAlignment(Qt.AlignCenter)
             placeholder.setWordWrap(True)
             self.telemetry_content_layout.addWidget(placeholder)
