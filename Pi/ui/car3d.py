@@ -151,6 +151,11 @@ class Car3DWidget(QWidget):
         
         # Set root entity
         self.view.setRootEntity(self.rootEntity)
+        
+        # Initialize wheel tracking
+        self.wheel_entities = []
+        self.wheel_transforms = []
+        self.current_wheel_rotation = 0.0
     
     def setupLights(self):
         """Set up comprehensive lighting for the scene."""
@@ -199,6 +204,8 @@ class Car3DWidget(QWidget):
         if status == Qt3DRender.QMesh.Ready:
             print("STL mesh loaded successfully")
             self.model_loaded = True
+            # Try to find wheel entities after model loads
+            QTimer.singleShot(500, self.find_wheel_entities)
         elif status == Qt3DRender.QMesh.Error:
             print("Error loading STL mesh")
     
@@ -207,16 +214,18 @@ class Car3DWidget(QWidget):
         if status == Qt3DRender.QSceneLoader.Ready:
             print("FBX/OBJ scene loaded successfully")
             self.model_loaded = True
+            # Try to find wheel entities after model loads
+            QTimer.singleShot(1000, self.find_wheel_entities)
         elif status == Qt3DRender.QSceneLoader.Error:
             print("Error loading FBX/OBJ scene")
     
     def setWheelAngle(self, angle):
-        """Placeholder for steering wheel angle."""
-        pass
+        """Set the wheel rotation angle in degrees."""
+        self.rotate_wheels(angle)
     
     def getWheelAngle(self):
-        """Placeholder for getting wheel angle."""
-        return 0
+        """Get the current wheel rotation angle."""
+        return self.current_wheel_rotation
     
     def get_camera_settings(self):
         """Get current camera position, view center, and up vector."""
@@ -250,3 +259,95 @@ class Car3DWidget(QWidget):
                 print(f"Loaded camera settings: pos={settings.get('position')}, center={settings.get('viewCenter')}")
             except Exception as e:
                 print(f"Error setting camera settings: {e}")
+    
+    def find_wheel_entities(self):
+        """Find wheel entities in the loaded model by name patterns."""
+        self.wheel_entities = []
+        self.wheel_transforms = []
+        
+        if hasattr(self, 'modelEntity'):
+            # Common wheel naming patterns
+            wheel_patterns = [
+                'wheel', 'tire', 'rim', 'front', 'rear', 'left', 'right',
+                'fl', 'fr', 'rl', 'rr',  # front-left, front-right, etc.
+                'wheel_fl', 'wheel_fr', 'wheel_rl', 'wheel_rr'
+            ]
+            
+            # Recursively search for wheel entities
+            self._search_for_wheels(self.modelEntity, wheel_patterns)
+            
+            print(f"Found {len(self.wheel_entities)} potential wheel entities")
+            return len(self.wheel_entities) > 0
+        
+        return False
+    
+    def _search_for_wheels(self, entity, patterns):
+        """Recursively search for entities with wheel-like names."""
+        try:
+            # Check if this entity has a name that suggests it's a wheel
+            if hasattr(entity, 'objectName'):
+                name = entity.objectName().lower()
+                for pattern in patterns:
+                    if pattern in name:
+                        print(f"Found potential wheel entity: {name}")
+                        
+                        # Create or find transform component for this entity
+                        transform = None
+                        for component in entity.components():
+                            if isinstance(component, Qt3DCore.QTransform):
+                                transform = component
+                                break
+                        
+                        if not transform:
+                            # Create a new transform if none exists
+                            transform = Qt3DCore.QTransform()
+                            entity.addComponent(transform)
+                        
+                        self.wheel_entities.append(entity)
+                        self.wheel_transforms.append(transform)
+                        break
+            
+            # Search child entities
+            for child in entity.childNodes():
+                if isinstance(child, Qt3DCore.QEntity):
+                    self._search_for_wheels(child, patterns)
+                    
+        except Exception as e:
+            print(f"Error searching for wheels: {e}")
+    
+    def rotate_wheels(self, angle_degrees):
+        """Rotate all found wheel entities by the specified angle in degrees."""
+        self.current_wheel_rotation = angle_degrees
+        
+        if not self.wheel_transforms:
+            # Try to find wheels if we haven't already
+            self.find_wheel_entities()
+        
+        for transform in self.wheel_transforms:
+            try:
+                # Create rotation around the wheel's local axis (usually Y or Z)
+                # Most wheels rotate around Y-axis, but we can try both
+                rotation = QQuaternion.fromAxisAndAngle(QVector3D(0, 1, 0), angle_degrees)
+                transform.setRotation(rotation)
+            except Exception as e:
+                print(f"Error rotating wheel: {e}")
+    
+    def set_wheel_rotation_axis(self, axis_vector):
+        """Set the rotation axis for wheels (default is Y-axis: 0,1,0)."""
+        self.wheel_rotation_axis = axis_vector
+    
+    def animate_wheel_rotation(self, speed_rpm):
+        """Animate wheel rotation based on speed (RPM)."""
+        if speed_rpm == 0:
+            return
+            
+        # Convert RPM to degrees per second (360 degrees per rotation)
+        degrees_per_second = speed_rpm * 6  # 60 seconds/minute * 360 degrees/rotation / 60
+        
+        # For smooth animation, you might want to use a QTimer
+        # This is a simple version that sets rotation based on current time
+        import time
+        current_time = time.time()
+        total_rotation = (current_time * degrees_per_second) % 360
+        
+        self.rotate_wheels(total_rotation)

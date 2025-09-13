@@ -1,8 +1,9 @@
 from PySide6.QtWidgets import (QMainWindow, QFrame, QSplitter, 
-                              QSizePolicy, QWidget, QVBoxLayout, QLabel, QHBoxLayout, QMessageBox, QApplication)
-from PySide6.QtCore import Qt, QSettings, QSize
+                              QSizePolicy, QWidget, QVBoxLayout, QLabel, QHBoxLayout, QMessageBox, QApplication, QScrollArea)
+from PySide6.QtCore import Qt, QSettings, QSize, QTimer, QMutex
 from ui.gauge import GaugeWidget
 from ui.car3d import Car3DWidget
+from ui.battery_gauge import BatteryGaugeWidget
 import os
 import sys
 
@@ -68,12 +69,12 @@ class F1Dashboard(QMainWindow):
         self.main_splitter.setChildrenCollapsible(False)  # Prevent collapsing widgets completely
         
         # RPM gauge
-        self.rpm_gauge = GaugeWidget("RPM × 1000", 14, "TH")
+        self.rpm_gauge = GaugeWidget("RPM × 1000", 14000, "TH")
         self.rpm_gauge.setMinimumWidth(150)
         self.rpm_gauge.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         
         # MPH gauge
-        self.mph_gauge = GaugeWidget("MPH", 60, "ENG_TN")
+        self.mph_gauge = GaugeWidget("MPH", 60, "ENG_TUN")
         self.mph_gauge.setMinimumWidth(150)
         self.mph_gauge.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         
@@ -102,18 +103,69 @@ class F1Dashboard(QMainWindow):
         self.telemetry_frame.setStyleSheet("background-color: #1E1E1E; border-radius: 10px;")
         self.telemetry_frame.setMinimumHeight(100)
         
-        telemetry_layout = QVBoxLayout(self.telemetry_frame)
+        # Create main layout for telemetry frame
+        telemetry_main_layout = QVBoxLayout(self.telemetry_frame)
+        
+        # Add title label
         telemetry_label = QLabel("TELEMETRY DATA")
         telemetry_label.setStyleSheet("color: #555; font-size: 14px;")
         telemetry_label.setAlignment(Qt.AlignCenter)
-        telemetry_layout.addWidget(telemetry_label)
+        telemetry_main_layout.addWidget(telemetry_label)
         
-        # Create a new vertical splitter to separate main content from telemetry
+        # Create scroll area for telemetry data
+        self.telemetry_scroll = QScrollArea()
+        self.telemetry_scroll.setWidgetResizable(True)
+        self.telemetry_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAlwaysOff)
+        self.telemetry_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        self.telemetry_scroll.setStyleSheet("""
+            QScrollArea {
+                border: none;
+                background-color: transparent;
+            }
+            QScrollBar:vertical {
+                background-color: #333;
+                width: 12px;
+                border-radius: 6px;
+            }
+            QScrollBar::handle:vertical {
+                background-color: #666;
+                border-radius: 6px;
+                min-height: 20px;
+            }
+            QScrollBar::handle:vertical:hover {
+                background-color: #888;
+            }
+        """)
+        
+        # Create widget to hold scrollable content
+        self.telemetry_content_widget = QWidget()
+        self.telemetry_content_layout = QVBoxLayout(self.telemetry_content_widget)
+        self.telemetry_content_layout.setContentsMargins(5, 5, 5, 5)
+        self.telemetry_content_layout.setSpacing(2)
+        
+        self.telemetry_scroll.setWidget(self.telemetry_content_widget)
+        telemetry_main_layout.addWidget(self.telemetry_scroll)
+        
+        # Create battery gauge
+        self.battery_gauge = BatteryGaugeWidget()
+        self.battery_gauge.setBatteryLevel(85)  # Default battery level
+        
+        # Create horizontal splitter for bottom section (telemetry + battery)
+        self.bottom_splitter = QSplitter(Qt.Horizontal)
+        self.bottom_splitter.setHandleWidth(8)
+        self.bottom_splitter.setChildrenCollapsible(False)
+        self.bottom_splitter.addWidget(self.telemetry_frame)  # Telemetry on left
+        self.bottom_splitter.addWidget(self.battery_gauge)    # Battery on right
+        
+        # Set initial sizes for bottom splitter (80% telemetry, 20% battery)
+        self.bottom_splitter.setSizes([800, 200])
+        
+        # Create a new vertical splitter to separate main content from bottom section
         self.vertical_splitter = QSplitter(Qt.Vertical)
         self.vertical_splitter.setHandleWidth(8)
         self.vertical_splitter.setChildrenCollapsible(False)
-        self.vertical_splitter.addWidget(upper_container)       # Upper content first
-        self.vertical_splitter.addWidget(self.telemetry_frame)  # Telemetry frame at bottom
+        self.vertical_splitter.addWidget(upper_container)     # Upper content first
+        self.vertical_splitter.addWidget(self.bottom_splitter) # Bottom section with telemetry + battery
         
         # Set initial sizes for the vertical splitter (70% upper, 30% telemetry)
         self.vertical_splitter.setSizes([700, 300])
@@ -137,15 +189,64 @@ class F1Dashboard(QMainWindow):
         
         # Connect splitter's splitterMoved signal
         self.vertical_splitter.splitterMoved.connect(self._on_telemetry_resize)
+        self.bottom_splitter.splitterMoved.connect(self.save_bottom_splitter_settings)
         
         # Initialize window geometry and settings
         self._setup_window_geometry()
         self._connect_geometry_events()
+        
+        # Initialize thread-safe data sharing
+        self.data_mutex = QMutex()
+        self.shared_data = {}
     
     def run(self):
         """Show the dashboard and run the application."""
         self.show()
+        
+        # Set up periodic updates from thread-safe data
+        self.shared_timer = QTimer()
+        self.shared_timer.timeout.connect(self.update_from_shared_data)
+        self.shared_timer.start(50)  # Check every 50ms (20Hz)
+        
         return self.app.exec()
+    
+    def set_data_thread_safe(self, data_dict):
+        """Thread-safe method to update dashboard data from external threads."""
+        self.data_mutex.lock()
+        try:
+            self.shared_data.update(data_dict)
+        finally:
+            self.data_mutex.unlock()
+    
+    def update_from_shared_data(self):
+        """Update dashboard from thread-safe shared data."""
+        self.data_mutex.lock()
+        try:
+            data = self.shared_data.copy()
+            self.shared_data.clear()  # Clear after reading
+        finally:
+            self.data_mutex.unlock()
+        
+        # Update dashboard with the data
+        if data:
+            if 'rpm' in data:
+                self.setRPM(data['rpm'])
+            if 'speed' in data:
+                self.setSpeed(data['speed'])
+            if 'throttle' in data:
+                self.setThrottle(data['throttle'])
+            if 'tune' in data:
+                self.setTune(data['tune'])
+            if 'wheel_rotation' in data:
+                self.setWheelRotation(data['wheel_rotation'])
+            if 'gear' in data:
+                self.setGear(data['gear'])
+            if 'battery' in data:
+                self.setBattery(data['battery'])
+            
+            # Update telemetry display (exclude battery since it has its own widget)
+            display_data = {k: v for k, v in data.items() if k != 'battery'}
+            self.updateTelemetryDisplay(display_data)
     
     def _setup_window_geometry(self):
         """Set up window size and position from settings."""
@@ -184,6 +285,9 @@ class F1Dashboard(QMainWindow):
         # after all other layout operations
         self.load_splitter_settings()
         
+        # Load bottom splitter settings
+        self.load_bottom_splitter_settings()
+        
         # Load camera settings if available
         self.load_camera_settings()
     
@@ -221,6 +325,22 @@ class F1Dashboard(QMainWindow):
         """Get current RPM value."""
         return self.rpm_gauge.getValue()
     
+    def setGear(self, gear):
+        """Set the gear display on the RPM gauge center."""
+        # Format gear appropriately
+        if gear == 0:
+            gear_text = "N"  # Neutral
+        elif gear == -1:
+            gear_text = "R"  # Reverse
+        else:
+            gear_text = str(gear)  # Gear number
+        
+        self.rpm_gauge.setCenterValue(gear_text)
+    
+    def getGear(self):
+        """Get current gear value from RPM gauge center."""
+        return self.rpm_gauge.getCenterValue()
+    
     def getSpeed(self):
         """Get current speed value."""
         return self.mph_gauge.getValue()
@@ -233,6 +353,14 @@ class F1Dashboard(QMainWindow):
         """Get current throttle value."""
         return self.rpm_gauge.getThrottle()
     
+    def setBattery(self, battery_level):
+        """Set the battery level (0-100)."""
+        self.battery_gauge.setBatteryLevel(battery_level)
+    
+    def getBattery(self):
+        """Get current battery level."""
+        return self.battery_gauge.getBatteryLevel()
+    
     def setTune(self, tune):
         """Set the throttle value (0-1 range)."""
         self.mph_gauge.setThrottle(tune)
@@ -240,6 +368,24 @@ class F1Dashboard(QMainWindow):
     def getTune(self):
         """Get current throttle value."""
         return self.mph_gauge.getThrottle()
+    
+    def setWheelRotation(self, angle_degrees):
+        """Set the wheel rotation angle in degrees."""
+        self.car_widget.setWheelAngle(angle_degrees)
+    
+    def getWheelRotation(self):
+        """Get the current wheel rotation angle."""
+        return self.car_widget.getWheelAngle()
+    
+    def animateWheelsFromSpeed(self, speed_mph):
+        """Animate wheel rotation based on vehicle speed."""
+        # Convert speed to wheel RPM (rough approximation)
+        # Assuming wheel diameter of ~24 inches (common for race cars)
+        wheel_circumference_feet = 3.14159 * 2  # 24 inches = 2 feet
+        feet_per_minute = speed_mph * 5280 / 60  # Convert MPH to feet per minute
+        wheel_rpm = feet_per_minute / wheel_circumference_feet
+        
+        self.car_widget.animate_wheel_rotation(wheel_rpm)
     
     def resetValues(self):
         """Reset all dashboard values to zero/default."""
@@ -249,19 +395,22 @@ class F1Dashboard(QMainWindow):
     
     def updateTelemetryDisplay(self, data_dict):
         """Update the telemetry data space with custom information.""" 
-        # Remove old widgets
-        for i in reversed(range(self.telemetry_frame.layout().count())): 
-            widget = self.telemetry_frame.layout().itemAt(i).widget()
-            if widget:
-                widget.setParent(None)
+        # Clear existing content
+        for i in reversed(range(self.telemetry_content_layout.count())): 
+            child = self.telemetry_content_layout.itemAt(i)
+            if child.widget():
+                child.widget().setParent(None)
+            elif child.layout():
+                self.clearLayout(child.layout())
         
-        # Create a horizontal layout for each data pair
+        # Add new data rows
         if data_dict:
             for label, value in data_dict.items():
                 row_layout = QHBoxLayout()
                 
                 label_widget = QLabel(f"{label}:")
                 label_widget.setStyleSheet("color: #AAA; font-size: 14px;")
+                label_widget.setFixedWidth(120)  # Fixed width for consistent alignment
                 
                 value_widget = QLabel(f"{value}")
                 value_widget.setStyleSheet("color: white; font-size: 14px; font-weight: bold;")
@@ -270,13 +419,29 @@ class F1Dashboard(QMainWindow):
                 row_layout.addWidget(value_widget)
                 row_layout.addStretch()
                 
-                self.telemetry_frame.layout().addLayout(row_layout)
+                # Create a widget to hold this row
+                row_widget = QWidget()
+                row_widget.setLayout(row_layout)
+                
+                self.telemetry_content_layout.addWidget(row_widget)
+                
+            # Add stretch to push content to top
+            self.telemetry_content_layout.addStretch()
         else:
             # Add placeholder if no data
-            placeholder = QLabel("TELEMETRY DATA")
+            placeholder = QLabel("No telemetry data")
             placeholder.setStyleSheet("color: #555; font-size: 14px;")
             placeholder.setAlignment(Qt.AlignCenter)
-            self.telemetry_frame.layout().addWidget(placeholder)
+            self.telemetry_content_layout.addWidget(placeholder)
+    
+    def clearLayout(self, layout):
+        """Helper method to clear a layout recursively."""
+        while layout.count():
+            child = layout.takeAt(0)
+            if child.widget():
+                child.widget().setParent(None)
+            elif child.layout():
+                self.clearLayout(child.layout())
     
     def load_splitter_settings(self):
         """Load saved splitter sizes from settings.""" 
@@ -309,6 +474,37 @@ class F1Dashboard(QMainWindow):
         # Store as comma-separated string to avoid type issues
         self.settings.setValue("splitter/sizes", ",".join(str(x) for x in sizes))
         print(f"Saved splitter sizes: {sizes}")
+    
+    def save_bottom_splitter_settings(self):
+        """Save current bottom splitter sizes to settings.""" 
+        sizes = self.bottom_splitter.sizes()
+        # Store as comma-separated string to avoid type issues
+        self.settings.setValue("bottom_splitter/sizes", ",".join(str(x) for x in sizes))
+        print(f"Saved bottom splitter sizes: {sizes}")
+    
+    def load_bottom_splitter_settings(self):
+        """Load saved bottom splitter sizes from settings.""" 
+        if self.settings.contains("bottom_splitter/sizes"):
+            # Convert the saved string back to a list of integers
+            sizes_str = self.settings.value("bottom_splitter/sizes")
+            try:
+                if isinstance(sizes_str, str):
+                    # Handle string representation
+                    sizes = [int(x) for x in sizes_str.split(",")]
+                else:
+                    # Handle list representation
+                    sizes = [int(x) for x in sizes_str]
+                
+                # Apply the sizes only if we have the right number of elements
+                if len(sizes) == self.bottom_splitter.count():
+                    self.bottom_splitter.setSizes(sizes)
+                    print(f"Loaded bottom splitter sizes: {sizes}")
+                else:
+                    print(f"Bottom splitter size mismatch: saved {len(sizes)}, current {self.bottom_splitter.count()}")
+            except Exception as e:
+                print(f"Error loading bottom splitter sizes: {e}")
+        
+        return False  # Failed to load
     
     def load_camera_settings(self):
         """Load saved camera settings from configuration."""

@@ -18,6 +18,7 @@ class GaugeWidget(QWidget):
         self.max_value = max_value
         self.current_value = 0
         self.throttle = 0  # Add throttle property with default value 0
+        self.custom_center_value = None  # Custom value to display in center (e.g., gear)
         self.setMinimumSize(150, 150)
     
     def setValue(self, value):
@@ -48,6 +49,20 @@ class GaugeWidget(QWidget):
     def getThrottle(self):
         """Get the current throttle value"""
         return self.throttle
+    
+    def setCenterValue(self, value):
+        """Set a custom value to display in the center (e.g., gear number)"""
+        self.custom_center_value = value
+        self.update()
+    
+    def getCenterValue(self):
+        """Get the custom center value"""
+        return self.custom_center_value
+    
+    def clearCenterValue(self):
+        """Clear the custom center value to show the normal gauge value"""
+        self.custom_center_value = None
+        self.update()
     
     def paintEvent(self, event):
         """Render the gauge on screen."""
@@ -190,13 +205,33 @@ class GaugeWidget(QWidget):
         
         # Draw gauge title
         painter.setPen(QColor(200, 200, 200))
+        title_font = painter.font()
+        title_font.setPointSize(16)  # Increased from default
+        painter.setFont(title_font)
         painter.drawText(QRect(0, int(center_y + radius/2), self.width(), 30), 
                         Qt.AlignCenter, self.title)
         
-        # Draw value
+        # Draw value (main number) - MUCH BIGGER
         painter.setPen(QColor(255, 255, 255))
-        painter.drawText(QRect(0, int(center_y - 15), self.width(), 30), 
-                        Qt.AlignCenter, f"{int(self.current_value)}")
+        value_font = painter.font()
+        value_font.setPointSize(48)  # Even larger for main value
+        value_font.setBold(True)     # Make it bold for better visibility
+        painter.setFont(value_font)
+        
+        # Show custom center value if set, otherwise show the gauge value
+        if self.custom_center_value is not None:
+            center_text = str(self.custom_center_value)
+        else:
+            center_text = f"{int(self.current_value)}"
+            
+        painter.drawText(QRect(0, int(center_y - 35), self.width(), 70), 
+                        Qt.AlignCenter, center_text)
+        
+        # Reset font for tick marks (reduced by 8 points)
+        tick_font = painter.font()
+        tick_font.setPointSize(24)  # Reduced from 32 to 24
+        tick_font.setBold(True)     # Keep bold for visibility
+        painter.setFont(tick_font)
         
         # Draw gauge arc
         start_angle = 225 * 16  # 225 degrees in QPainter's 1/16th degree system
@@ -241,14 +276,24 @@ class GaugeWidget(QWidget):
             
             # Draw tick labels every other tick
             if i % 2 == 0:
-                text_x = center_x + (radius - 35) * math.cos(angle)
-                text_y = center_y - (radius - 35) * math.sin(angle)
+                text_x = center_x + (radius - 50) * math.cos(angle)  # Move further from center
+                text_y = center_y - (radius - 50) * math.sin(angle)
                 
                 tick_value = int(i * self.max_value / 10)
-                if self.max_value >= 1000:
-                    tick_label = f"{tick_value/1000:.1f}k" if tick_value >= 1000 else f"{tick_value}"
+                
+                # Special handling for RPM gauge (14000 max) to show clean numbers
+                if self.max_value == 14000:
+                    # For 14k RPM: show 0, 2, 4, 6, 8, 10, 12, 14 (representing thousands)
+                    tick_label = f"{tick_value // 1000}"
+                elif self.max_value >= 1000:
+                    # For other large values, use the original logic but with cleaner formatting
+                    if tick_value >= 1000 and tick_value % 1000 == 0:
+                        tick_label = f"{tick_value // 1000}k"
+                    else:
+                        tick_label = f"{tick_value}"
                 else:
                     tick_label = f"{tick_value}"
                 
-                rect = QRect(int(text_x) - 20, int(text_y) - 10, 40, 20)
+                # Much larger rectangle to accommodate font
+                rect = QRect(int(text_x) - 50, int(text_y) - 25, 100, 50)
                 painter.drawText(rect, Qt.AlignCenter, tick_label)
