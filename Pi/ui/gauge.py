@@ -95,7 +95,7 @@ class GaugeWidget(QWidget):
         size = min(rect.width(), rect.height()) * 0.9  # 90% of gauge size
         
         # Define the inner arc for throttle (smaller than the RPM arc)
-        inner_radius = size * 0.32  # Make throttle arc closer to center than RPM arc
+        inner_radius = size * 0.28  # Reduced from 0.32 to 0.28 for more separation from tick numbers
         arc_thickness = size * 0.04  # Thickness of the arc line
         
         # Set angles to match RPM gauge
@@ -173,16 +173,28 @@ class GaugeWidget(QWidget):
         painter.setFont(font)
         
         # Position below the main display, closer to the bottom of the gauge
-        throttle_text = f"{self.throttle_label}: {int(self.throttle * 100)}%"
+        # Split into two lines: label on top, value below
+        label_text = f"{self.throttle_label}"  # Just the label (TH, ENG_TUN, etc.)
+        value_text = f"{int(self.throttle * 100)}%"  # Just the percentage
         
         # Also adjust the text rectangle size based on the gauge size
-        text_rect = QRectF(
+        # Draw label text (smaller, above)
+        label_rect = QRectF(
             center.x() - inner_radius,
-            center.y() + size * 0.05,  # Position lower in the gauge
+            center.y() + size * 0.02,  # Position slightly higher
             inner_radius * 2,
-            inner_radius * 0.4
+            inner_radius * 0.2  # Smaller height for label
         )
-        painter.drawText(text_rect, Qt.AlignCenter, throttle_text)
+        painter.drawText(label_rect, Qt.AlignCenter, label_text)
+        
+        # Draw value text (below the label)
+        value_rect = QRectF(
+            center.x() - inner_radius,
+            center.y() + size * 0.08,  # Position below the label
+            inner_radius * 2,
+            inner_radius * 0.2  # Smaller height for value
+        )
+        painter.drawText(value_rect, Qt.AlignCenter, value_text)
         
         painter.restore()
     
