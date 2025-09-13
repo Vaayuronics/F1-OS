@@ -327,7 +327,7 @@ class Car3DWidget(QWidget):
             try:
                 # Create rotation around the wheel's local axis (usually Y or Z)
                 # Most wheels rotate around Y-axis, but we can try both
-                rotation = QQuaternion.fromAxisAndAngle(QVector3D(0, 1, 0), angle_degrees)
+                rotation = QQuaternion.fromAxisAndAngle(QVector3D(0, 0, 1), angle_degrees)
                 transform.setRotation(rotation)
             except Exception as e:
                 print(f"Error rotating wheel: {e}")

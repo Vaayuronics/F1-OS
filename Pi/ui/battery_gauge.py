@@ -40,35 +40,38 @@ class BatteryGaugeWidget(QWidget):
         painter.setBrush(QBrush(QColor(30, 30, 30)))
         painter.drawRect(rect)
         
-        # Draw battery icon and bar
+        # Draw battery icon
         self._drawBatteryIcon(painter)
-        self._drawBatteryBar(painter)
         self._drawBatteryPercentage(painter)
     
     def _drawBatteryIcon(self, painter):
-        """Draw a simple battery icon on the left side."""
+        """Draw an enlarged battery icon that fills the available space."""
         painter.save()
         
         rect = self.rect()
-        icon_size = 30
-        icon_x = 15
-        icon_y = rect.height() / 2 - icon_size / 2
+        # Make the battery much larger to fill the space previously used by both icon and bar
+        icon_width = rect.width() * 0.6  # Use 60% of widget width
+        icon_height = rect.height() * 0.5  # Use 50% of widget height
+        
+        # Center the battery icon
+        icon_x = (rect.width() - icon_width) / 2
+        icon_y = rect.height() * 0.15  # Position it in upper portion, leaving space for percentage
         
         # Draw battery outline
-        painter.setPen(QPen(QColor(200, 200, 200), 2))
+        painter.setPen(QPen(QColor(200, 200, 200), 3))  # Thicker outline for larger battery
         painter.setBrush(Qt.NoBrush)
         
         # Main battery body
-        battery_rect = QRectF(icon_x, icon_y, icon_size * 0.7, icon_size)
-        painter.drawRoundedRect(battery_rect, 3, 3)
+        battery_rect = QRectF(icon_x, icon_y, icon_width, icon_height)
+        painter.drawRoundedRect(battery_rect, 6, 6)  # Larger corner radius
         
-        # Battery terminal (top nub)
-        terminal_width = icon_size * 0.3
-        terminal_height = icon_size * 0.15
-        terminal_x = icon_x + (icon_size * 0.7 - terminal_width) / 2
+        # Battery terminal (top nub) - make it proportional
+        terminal_width = icon_width * 0.3
+        terminal_height = icon_height * 0.12
+        terminal_x = icon_x + (icon_width - terminal_width) / 2
         terminal_y = icon_y - terminal_height
         terminal_rect = QRectF(terminal_x, terminal_y, terminal_width, terminal_height)
-        painter.drawRect(terminal_rect)
+        painter.drawRoundedRect(terminal_rect, 2, 2)
         
         # Fill battery based on level
         if self.battery_level > 0:
@@ -86,60 +89,20 @@ class BatteryGaugeWidget(QWidget):
             painter.setBrush(QBrush(fill_color))
             painter.setPen(Qt.NoPen)
             
+            # Add some padding inside the battery outline
+            padding = 4
             fill_rect = QRectF(
-                battery_rect.left() + 2, 
-                fill_y + 2,
-                battery_rect.width() - 4, 
-                fill_height - 2
+                battery_rect.left() + padding, 
+                fill_y + padding,
+                battery_rect.width() - (padding * 2), 
+                fill_height - padding
             )
-            painter.drawRoundedRect(fill_rect, 2, 2)
-        
-        painter.restore()
-    
-    def _drawBatteryBar(self, painter):
-        """Draw the vertical colored bar next to the battery icon."""
-        painter.save()
-        
-        rect = self.rect()
-        bar_width = 20
-        bar_height = rect.height() * 0.6
-        bar_x = rect.width() - bar_width - 10
-        bar_y = (rect.height() - bar_height) / 2
-        
-        # Draw background bar
-        painter.setPen(QPen(QColor(60, 60, 60), 2))
-        painter.setBrush(QBrush(QColor(40, 40, 40)))
-        bar_rect = QRectF(bar_x, bar_y, bar_width, bar_height)
-        painter.drawRoundedRect(bar_rect, 5, 5)
-        
-        # Draw filled portion
-        if self.battery_level > 0:
-            fill_height = bar_height * (self.battery_level / 100)
-            fill_y = bar_y + bar_height - fill_height
-            
-            # Create gradient color based on level
-            if self.battery_level > 60:
-                fill_color = QColor(0, 255, 0)  # Green
-            elif self.battery_level > 30:
-                fill_color = QColor(255, 165, 0)  # Orange
-            else:
-                fill_color = QColor(255, 0, 0)  # Red
-            
-            painter.setBrush(QBrush(fill_color))
-            painter.setPen(Qt.NoPen)
-            
-            fill_rect = QRectF(
-                bar_x + 2, 
-                fill_y + 2,
-                bar_width - 4, 
-                fill_height - 4
-            )
-            painter.drawRoundedRect(fill_rect, 3, 3)
+            painter.drawRoundedRect(fill_rect, 4, 4)
         
         painter.restore()
     
     def _drawBatteryPercentage(self, painter):
-        """Draw the percentage text below the bar."""
+        """Draw the percentage text below the battery icon."""
         painter.save()
         
         rect = self.rect()
@@ -151,9 +114,9 @@ class BatteryGaugeWidget(QWidget):
         font.setBold(True)
         painter.setFont(font)
         
-        # Draw percentage text
+        # Draw percentage text below the enlarged battery icon
         percentage_text = f"{int(self.battery_level)}%"
-        text_rect = QRect(0, int(rect.height() * 0.8), rect.width(), int(rect.height() * 0.2))
+        text_rect = QRect(0, int(rect.height() * 0.7), rect.width(), int(rect.height() * 0.3))
         painter.drawText(text_rect, Qt.AlignCenter, percentage_text)
         
         painter.restore()
