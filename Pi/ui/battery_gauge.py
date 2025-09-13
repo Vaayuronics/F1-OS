@@ -14,8 +14,8 @@ class BatteryGaugeWidget(QWidget):
         """Initialize the battery gauge widget."""
         super().__init__(parent)
         self.battery_level = 100  # Battery level 0-100
-        self.setMinimumSize(80, 200)
-        self.setMaximumWidth(120)
+        self.setMinimumSize(60, 120)  # Reduced from 80x200 to 60x120
+        self.setMaximumWidth(100)     # Reduced from 120 to 100
     
     def setBatteryLevel(self, level):
         """Set the battery level (0-100)."""

@@ -81,10 +81,10 @@ class F1Dashboard(QMainWindow):
         self.mph_gauge.setMinimumWidth(80)  # Reduced from 150 to 80
         self.mph_gauge.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         
-        # 3D Car visualization - much smaller minimum for small screens
+        # 3D Car visualization - very small minimum for small screens
         self.car_widget = Car3DWidget(self.model_path)
-        self.car_widget.setMinimumWidth(100)  # Reduced from 300 to 100
-        self.car_widget.setMinimumHeight(150)  # Add minimum height constraint
+        self.car_widget.setMinimumWidth(60)   # Reduced from 100 to 60
+        self.car_widget.setMinimumHeight(80)  # Reduced from 150 to 80
         self.car_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         
         # Add widgets to splitter
@@ -98,7 +98,7 @@ class F1Dashboard(QMainWindow):
         self.main_splitter.setStretchFactor(2, 1)  # MPH gauge - fixed proportion
         
         # Set initial sizes better suited for small screen (480px width)
-        self.main_splitter.setSizes([120, 240, 120])  # Equal gauges, larger center
+        self.main_splitter.setSizes([100, 180, 100])  # More compact: smaller gauges and center
         
         # Load saved splitter sizes if available
         self.load_splitter_settings()
@@ -110,10 +110,10 @@ class F1Dashboard(QMainWindow):
         upper_layout.addWidget(title_label)
         upper_layout.addWidget(self.main_splitter, 5)  # Give more vertical space
         
-        # Create the telemetry frame - smaller minimum height for small screens
+        # Create the telemetry frame - very small minimum height for small screens
         self.telemetry_frame = QFrame()
         self.telemetry_frame.setStyleSheet("background-color: #1E1E1E; border-radius: 10px;")
-        self.telemetry_frame.setMinimumHeight(80)  # Reduced from 100 to 80
+        self.telemetry_frame.setMinimumHeight(50)  # Reduced from 80 to 50
         
         # Create main layout for telemetry frame
         telemetry_main_layout = QVBoxLayout(self.telemetry_frame)
@@ -169,8 +169,8 @@ class F1Dashboard(QMainWindow):
         self.bottom_splitter.addWidget(self.telemetry_frame)  # Telemetry on left
         self.bottom_splitter.addWidget(self.battery_gauge)    # Battery on right
         
-        # Set initial sizes for bottom splitter (70% telemetry, 30% battery for small screens)
-        self.bottom_splitter.setSizes([350, 150])
+        # Set initial sizes for bottom splitter (adjust for smaller battery widget)
+        self.bottom_splitter.setSizes([300, 80])  # Reduced battery width from 150 to 80
         
         # Create a new vertical splitter to separate main content from bottom section
         self.vertical_splitter = QSplitter(Qt.Vertical)
@@ -179,9 +179,9 @@ class F1Dashboard(QMainWindow):
         self.vertical_splitter.addWidget(upper_container)     # Upper content first
         self.vertical_splitter.addWidget(self.bottom_splitter) # Bottom section with telemetry + battery
         
-        # Set initial sizes for the vertical splitter - more conservative for small screens
-        # On 480x800 screen, reserve more space for bottom panel
-        self.vertical_splitter.setSizes([480, 200])  # Smaller upper section, larger bottom
+        # Set initial sizes for the vertical splitter - much more compact
+        # On 480x800 screen, make bottom panel smaller
+        self.vertical_splitter.setSizes([600, 120])  # Larger upper section, smaller bottom
         
         # Add the vertical splitter to the main layout
         main_layout.addWidget(self.vertical_splitter)
