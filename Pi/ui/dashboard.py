@@ -24,7 +24,7 @@ class F1Dashboard(QMainWindow):
         super().__init__()
         
         self.setWindowTitle(title)
-        self.setMinimumSize(800, 600)
+        self.setMinimumSize(480, 600)  # Reduced minimum width to match screen
         self.setStyleSheet("background-color: #121212;")
         
         # Set up settings from file path
@@ -59,34 +59,46 @@ class F1Dashboard(QMainWindow):
         self.setCentralWidget(central_widget)
         main_layout = QVBoxLayout(central_widget)
         
-        # Create top section for title
+        # Create top section for title - smaller for small screens
         title_label = QLabel(title)
-        title_label.setStyleSheet("color: white; font-size: 24px; font-weight: bold;")
+        title_label.setStyleSheet("color: white; font-size: 18px; font-weight: bold;")  # Reduced from 24px
         title_label.setAlignment(Qt.AlignCenter)
         
         # Create middle section with splitters for resizing
         self.main_splitter = QSplitter(Qt.Horizontal)
-        self.main_splitter.setChildrenCollapsible(False)  # Prevent collapsing widgets completely
+        self.main_splitter.setChildrenCollapsible(True)  # Allow collapsing for small screens
         
-        # RPM gauge
+        # Set stretch factors to prevent linked movement
+        # This helps maintain independent resizing of each section
+        
+        # RPM gauge - reduced minimum width for small screens
         self.rpm_gauge = GaugeWidget("RPM × 1000", 14000, "TH")
-        self.rpm_gauge.setMinimumWidth(150)
+        self.rpm_gauge.setMinimumWidth(80)  # Reduced from 150 to 80
         self.rpm_gauge.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         
-        # MPH gauge
+        # MPH gauge - reduced minimum width for small screens
         self.mph_gauge = GaugeWidget("MPH", 60, "ENG_TUN")
-        self.mph_gauge.setMinimumWidth(150)
+        self.mph_gauge.setMinimumWidth(80)  # Reduced from 150 to 80
         self.mph_gauge.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         
-        # 3D Car visualization
+        # 3D Car visualization - much smaller minimum for small screens
         self.car_widget = Car3DWidget(self.model_path)
-        self.car_widget.setMinimumWidth(300)
+        self.car_widget.setMinimumWidth(100)  # Reduced from 300 to 100
+        self.car_widget.setMinimumHeight(150)  # Add minimum height constraint
         self.car_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         
         # Add widgets to splitter
         self.main_splitter.addWidget(self.rpm_gauge)
         self.main_splitter.addWidget(self.car_widget)
         self.main_splitter.addWidget(self.mph_gauge)
+        
+        # Set stretch factors to prevent linked dragging behavior
+        self.main_splitter.setStretchFactor(0, 1)  # RPM gauge - fixed proportion
+        self.main_splitter.setStretchFactor(1, 2)  # 3D widget - more flexible
+        self.main_splitter.setStretchFactor(2, 1)  # MPH gauge - fixed proportion
+        
+        # Set initial sizes better suited for small screen (480px width)
+        self.main_splitter.setSizes([120, 240, 120])  # Equal gauges, larger center
         
         # Load saved splitter sizes if available
         self.load_splitter_settings()
@@ -98,10 +110,10 @@ class F1Dashboard(QMainWindow):
         upper_layout.addWidget(title_label)
         upper_layout.addWidget(self.main_splitter, 5)  # Give more vertical space
         
-        # Create the telemetry frame
+        # Create the telemetry frame - smaller minimum height for small screens
         self.telemetry_frame = QFrame()
         self.telemetry_frame.setStyleSheet("background-color: #1E1E1E; border-radius: 10px;")
-        self.telemetry_frame.setMinimumHeight(100)
+        self.telemetry_frame.setMinimumHeight(80)  # Reduced from 100 to 80
         
         # Create main layout for telemetry frame
         telemetry_main_layout = QVBoxLayout(self.telemetry_frame)
@@ -157,8 +169,8 @@ class F1Dashboard(QMainWindow):
         self.bottom_splitter.addWidget(self.telemetry_frame)  # Telemetry on left
         self.bottom_splitter.addWidget(self.battery_gauge)    # Battery on right
         
-        # Set initial sizes for bottom splitter (80% telemetry, 20% battery)
-        self.bottom_splitter.setSizes([800, 200])
+        # Set initial sizes for bottom splitter (70% telemetry, 30% battery for small screens)
+        self.bottom_splitter.setSizes([350, 150])
         
         # Create a new vertical splitter to separate main content from bottom section
         self.vertical_splitter = QSplitter(Qt.Vertical)
@@ -167,8 +179,9 @@ class F1Dashboard(QMainWindow):
         self.vertical_splitter.addWidget(upper_container)     # Upper content first
         self.vertical_splitter.addWidget(self.bottom_splitter) # Bottom section with telemetry + battery
         
-        # Set initial sizes for the vertical splitter (70% upper, 30% telemetry)
-        self.vertical_splitter.setSizes([700, 300])
+        # Set initial sizes for the vertical splitter - more conservative for small screens
+        # On 480x800 screen, reserve more space for bottom panel
+        self.vertical_splitter.setSizes([480, 200])  # Smaller upper section, larger bottom
         
         # Add the vertical splitter to the main layout
         main_layout.addWidget(self.vertical_splitter)
@@ -250,16 +263,16 @@ class F1Dashboard(QMainWindow):
     
     def _setup_window_geometry(self):
         """Set up window size and position from settings."""
-        # Set size from settings if available, otherwise use default
+        # Set size from settings if available, otherwise use default for small screen
         if self.settings.contains("window/size"):
             size_str = self.settings.value("window/size")
             try:
                 width, height = map(int, size_str.split(","))
                 self.resize(width, height)
             except:
-                self.setMinimumSize(QSize(1000, 700))
+                self.resize(QSize(480, 800))  # Default to actual screen size
         else:
-            self.setMinimumSize(QSize(1000, 700))
+            self.resize(QSize(480, 800))  # Default to actual screen size
         
         # Set position from settings if available
         if self.settings.contains("window/position"):
