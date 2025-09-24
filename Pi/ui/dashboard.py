@@ -1,14 +1,18 @@
 from PySide6.QtWidgets import (QMainWindow, QFrame, QSplitter, 
                               QSizePolicy, QWidget, QVBoxLayout, QLabel, QHBoxLayout, QMessageBox, QApplication, QScrollArea)
-from PySide6.QtCore import Qt, QSettings, QSize, QTimer, QMutex
+from PySide6.QtCore import Qt, QSettings, QSize, Signal
 from ui.gauge import GaugeWidget
 from ui.car3d import Car3DWidget
 from ui.battery_gauge import BatteryGaugeWidget
 import os
 import sys
 
+REFRESH_RATE = 1/58
+
 class F1Dashboard(QMainWindow):
     """Main dashboard window that displays gauges and car visualization."""
+    # Signal to receive data dicts from worker threads safely (queued connection)
+    data_signal = Signal(dict)
     
     def __init__(self, settings_file_path: str = None, model_path: str = None, title=""):
         """Initialize the dashboard with all widgets and layouts.""" 
@@ -206,58 +210,48 @@ class F1Dashboard(QMainWindow):
         self._setup_window_geometry()
         self._connect_geometry_events()
         
-        # Initialize thread-safe data sharing
-        self.data_mutex = QMutex()
-        self.shared_data = {}
+    # Connect signal for immediate cross-thread UI updates
+        self.data_signal.connect(self._apply_data_dict)
     
     def run(self):
         """Show the dashboard and run the application."""
         self.show()
-        
-        # Set up periodic updates from thread-safe data
-        self.shared_timer = QTimer()
-        self.shared_timer.timeout.connect(self.update_from_shared_data)
-        self.shared_timer.start(50)  # Check every 50ms (20Hz)
-        
         return self.app.exec()
     
     def set_data_thread_safe(self, data_dict):
-        """Thread-safe method to update dashboard data from external threads."""
-        self.data_mutex.lock()
-        try:
-            self.shared_data.update(data_dict)
-        finally:
-            self.data_mutex.unlock()
+        """Thread-safe method to update dashboard data from external threads.
+
+        Immediately emit a signal so updates are applied on the UI thread.
+        """
+        self.data_signal.emit(dict(data_dict))
     
-    def update_from_shared_data(self):
-        """Update dashboard from thread-safe shared data."""
-        self.data_mutex.lock()
-        try:
-            data = self.shared_data.copy()
-            self.shared_data.clear()  # Clear after reading
-        finally:
-            self.data_mutex.unlock()
-        
-        # Update dashboard with the data
-        if data:
-            if 'rpm' in data:
-                self.setRPM(data['rpm'])
-            if 'speed' in data:
-                self.setSpeed(data['speed'])
-            if 'throttle' in data:
-                self.setThrottle(data['throttle'])
-            if 'tune' in data:
-                self.setTune(data['tune'])
-            if 'wheel_rotation' in data:
-                self.setWheelRotation(data['wheel_rotation'])
-            if 'gear' in data:
-                self.setGear(data['gear'])
-            if 'battery' in data:
-                self.setBattery(data['battery'])
-            
-            # Update telemetry display (exclude battery since it has its own widget)
-            display_data = {k: v for k, v in data.items() if k != 'battery'}
-            self.updateTelemetryDisplay(display_data)
+    def _apply_data_dict(self, data: dict):
+        """Apply telemetry data to widgets. Must run on the UI thread."""
+        if 'rpm' in data:
+            self.setRPM(data['rpm'])
+            data.pop('rpm')
+        if 'speed' in data:
+            self.setSpeed(data['speed'])
+            data.pop('speed')
+        if 'throttle' in data:
+            self.setThrottle(data['throttle'])
+            data.pop('throttle')
+        if 'tune' in data:
+            self.setTune(data['tune'])
+            data.pop('tune')
+        if 'wheel_rotation' in data:
+            self.setWheelRotation(data['wheel_rotation'])
+            data.pop('wheel_rotation')
+        if 'gear' in data:
+            self.setGear(data['gear'])
+            data.pop('gear')
+        if 'battery' in data:
+            self.setBattery(data['battery'])
+            data.pop('battery')
+
+        # Update telemetry display with remaining fields
+        display_data = {k: v for k, v in data.items()}
+        self.updateTelemetryDisplay(display_data)
     
     def enable_fullscreen(self):
         """Enable borderless fullscreen mode suitable for Raspberry Pi."""
