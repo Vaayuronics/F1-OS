@@ -1,7 +1,7 @@
 from machine import Pin
 
 class Knob:
-    def __init__(self, dt : int, clk : int, sw : int = -1):
+    def __init__(self, dt : int, clk : int, sw : int = -1, name : str = "Knob"):
         '''Creates a Rotary Encoder (Knob) object.\n
         Requires the dt pin : direction.\n
         Requires the clk pin : change pin.\n
@@ -15,6 +15,7 @@ class Knob:
         self.counter = 0
         self.last_clk = self.clk.value()
         self.button_down = False
+        self.name = name
 
     def update_encoder(self) -> int:
         '''Checks the clk and dt pins to increment the encoder.\n
@@ -72,3 +73,11 @@ class Knob:
         Returns False if the button is in the up or unpressed position.\n
         Does not update encoder state.'''
         return self.button_down
+    
+    def get_name(self) -> str:
+        '''Returns the name of the knob.'''
+        return self.name
+    
+    def set_name(self, name : str) -> None:
+        '''Sets the name of the knob.'''
+        self.name = name

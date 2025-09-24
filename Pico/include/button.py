@@ -1,11 +1,12 @@
 from machine import Pin
 
 class Button:
-    def __init__(self, gpio : int):
+    def __init__(self, gpio : int, name : str = "Button"):
         '''Creates a button object.\n
         Requires a gpio pin for the pull down.'''
         self.gpio = Pin(gpio, Pin.IN, Pin.PULL_UP)
         self.button_down = False
+        self.name = name
 
     def poll(self) -> bool:
         '''Wrapper for the update functions.\n
@@ -22,3 +23,11 @@ class Button:
         '''Returns true if the button is down.\n
         Returns false otherwise.'''
         return self.button_down
+
+    def get_name(self):
+        '''Returns the name of the button.'''
+        return self.name
+    
+    def set_name(self, name : str):
+        '''Sets the name of the button.'''
+        self.name = name
