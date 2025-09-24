@@ -1,4 +1,4 @@
-from jerial import JSONSerialReader
+from devices.jerial import JSONSerialReader
 import time
 import threading
 import sys
