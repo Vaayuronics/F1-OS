@@ -1,8 +1,9 @@
 from devices.jerial import JSONSerialReader
+import engine.soundsys
 import time
 import threading
 import sys
-import signal
+import signal 
 from ui.dashboard import F1Dashboard, REFRESH_RATE
 
 '''
@@ -11,18 +12,26 @@ TODO: Check to see if the usb ports on the Raspberry Pi are still not working wi
 
 pico = JSONSerialReader("/dev/pico")
 arduino = JSONSerialReader("/dev/arduino")
+music_player = 
 dashboard = F1Dashboard("ui/dashboard_settings.ini", "ui/model.fbx")
+interrupt_lock = threading.Lock()
+ui_data_lock = threading.Lock()
+ui_data = None
 interrupted = False
 
 def signal_handler(signum, frame):
     """Handle SIGINT (Ctrl+C) gracefully"""
     global interrupted, dashboard
     print("\nReceived interrupt signal. Shutting down gracefully...")
-    interrupted = True
-    pico.ser.close()
-    arduino.ser.close()
+    with interrupt_lock:
+        interrupted = True
     if dashboard:
         dashboard.close()  # Close the dashboard window
+    pico.send({"command": "stop"})
+    arduino.send({"command": "stop"})
+    time.sleep(1) # Give some time for devices to process stop command
+    pico.ser.close()
+    arduino.ser.close()
     sys.exit(0)  # Exit cleanly
 
 # Set up signal handler for graceful shutdown
@@ -31,13 +40,62 @@ signal.signal(signal.SIGINT, signal_handler)
 def telemetry_update_loop():
     """Continuously update telemetry data"""
     global interrupted
-    while not interrupted:
+    while True:
+        interrupt_lock.acquire()
+        if interrupted:
+            interrupt_lock.release()
+            break
+        ui_data_lock.acquire()
+        if ui_data:
+            dashboard.set_data_thread_safe(ui_data)
+        ui_data_lock.release()
+        time.sleep(REFRESH_RATE)  # Update at ~58Hz to match display refresh rate
+
+def hardware_loop():
+    """Continuously poll hardware devices"""
+    global interrupted, ui_data
+    while True:
+        interrupt_lock.acquire()
+        if interrupted:
+            interrupt_lock.release()
+            break
         pico_data = pico.poll()
         arduino_data = arduino.poll()
-        if pico_data and arduino_data:
-            combined_data = {**pico_data, **arduino_data}
-            dashboard.set_data_thread_safe(combined_data)
-        time.sleep(REFRESH_RATE)  # Update at ~58Hz to match display refresh rate
+        ui_processed_data = process_data(pico_data, arduino_data)
+        if ui_processed_data:
+            ui_data_lock.acquire()
+            ui_data = ui_processed_data
+            ui_data_lock.release()
+        interrupt_lock.release()
+        time.sleep(0.01)  # Polling interval
+
+def process_data(pico_data, arduino_data) -> dict:
+    """Combine and process data from pico and arduino.\n
+    Operate on any hardware instructions.\n
+    Return combined data for UI."""
+    combined = {}
+    if pico_data:
+        '''User button inputs'''
+        if 'buttons' in pico_data:
+            buttons = pico_data['buttons']
+            if 'engine_knob' in buttons:
+                combined['engine_volume'] = buttons['engine_knob'].get('count', 0)
+                combined['engine_mute'] = buttons['engine_knob'].get('switch', 0) == 0
+            if 'music_knob' in buttons:
+                combined['music_volume'] = buttons['music_knob'].get('count', 0)
+                combined['music_mute'] = buttons['music_knob'].get('switch', 0) == 0
+        if 'knobs' in pico_data:
+            knobs = pico_data['knobs']
+            for k in knobs:
+                combined[f"{k.get_name()}_count"] = k.get_count()
+                combined[f"{k.get_name()}_switch"] = k.get_switch()
+    if arduino_data:
+        '''Throttle and Speed data'''
+        if 'throttle' in arduino_data:
+            combined['throttle'] = arduino_data['throttle']
+        if 'speed' in arduino_data:
+            combined['speed'] = arduino_data['speed']
+    return combined
 
 if __name__ == "__main__":
     print("Booting up system.")

@@ -15,7 +15,7 @@ LED.on()  # Turn on immediately to show we're starting
 # Defining objects
 gyro = gyro_module.Gyro(16, 17)
 buttons = [Button(26, "Blue")]
-knobs = [Knob(19, 18, 20)]  # dt, clk, sw
+knobs = [Knob(19, 18, 20, "Engine")]  # dt, clk, sw
 poller = select.poll()
 last_led_toggle = 0
 
@@ -65,27 +65,23 @@ def read() -> dict:
 def process_command(command: dict) -> None:
     """Process the command received from stdin"""
     if command.get("command") == "reset":
+        save_angles()
         print(json.dumps({'status': 'resetting'}))
         reset()
     elif command.get("command") == "poll":
         # Create state object
         state = {
-            'steer': gyro.get_angles()[0],
-            'buttons': [{
-                "name": b.get_name(),
-                "state": b.get_state()
-            } for b in buttons],
-            'knobs': [{
-                "name": k.get_name(),
-                "count": k.get_count(),
-                "switch": k.get_switch()
-            } for k in knobs]
+            'status': 'polled',
+            'gyro': gyro.get_angles(),
+            'buttons': {b.get_name(): b.get_state() for b in buttons},
+            'knobs': {k.get_name(): {"count": k.get_count(), "switch": k.get_switch()} for k in knobs}
         }
         # Send response as JSON
         print(json.dumps(state))   
-    elif command.get("command") == "save":
+    elif command.get("command") == "stop":
         save_angles()
-        print(json.dumps({"status": "saved"}))
+        print(json.dumps({"status": "stopping"}))
+        exit(0)
     elif command.get("command") == "tare":
         gyro.tare_gyro((0,0,0))
         print(json.dumps({"status": "tared"}))

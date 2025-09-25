@@ -4,6 +4,7 @@ from PySide6.QtCore import Qt, QSettings, QSize, Signal
 from ui.gauge import GaugeWidget
 from ui.car3d import Car3DWidget
 from ui.battery_gauge import BatteryGaugeWidget
+from ui.volume_gauge import VolumeGaugeWidget
 import os
 import sys
 
@@ -160,19 +161,28 @@ class F1Dashboard(QMainWindow):
         self.telemetry_scroll.setWidget(self.telemetry_content_widget)
         telemetry_main_layout.addWidget(self.telemetry_scroll)
         
+        # Create volume gauges
+        self.engine_volume_gauge = VolumeGaugeWidget("ENG", "engine")
+        self.engine_volume_gauge.setVolumeLevel(75)  # Default engine volume
+        
+        self.music_volume_gauge = VolumeGaugeWidget("MUS", "speaker") 
+        self.music_volume_gauge.setVolumeLevel(60)  # Default music volume
+        
         # Create battery gauge
         self.battery_gauge = BatteryGaugeWidget()
         self.battery_gauge.setBatteryLevel(85)  # Default battery level
         
-        # Create horizontal splitter for bottom section (telemetry + battery)
+        # Create horizontal splitter for bottom section (telemetry + volume bars + battery)
         self.bottom_splitter = QSplitter(Qt.Horizontal)
         self.bottom_splitter.setHandleWidth(8)
         self.bottom_splitter.setChildrenCollapsible(False)
-        self.bottom_splitter.addWidget(self.telemetry_frame)  # Telemetry on left
-        self.bottom_splitter.addWidget(self.battery_gauge)    # Battery on right
+        self.bottom_splitter.addWidget(self.telemetry_frame)     # Telemetry on left
+        self.bottom_splitter.addWidget(self.engine_volume_gauge) # Engine volume 
+        self.bottom_splitter.addWidget(self.music_volume_gauge)  # Music volume
+        self.bottom_splitter.addWidget(self.battery_gauge)       # Battery on right
         
-        # Set initial sizes for bottom splitter (adjust for smaller battery widget)
-        self.bottom_splitter.setSizes([300, 80])  # Reduced battery width from 150 to 80
+        # Set initial sizes for bottom splitter (telemetry + 3 narrow gauges)
+        self.bottom_splitter.setSizes([240, 60, 60, 60])  # More space for telemetry, equal space for gauges
         
         # Create a new vertical splitter to separate main content from bottom section
         self.vertical_splitter = QSplitter(Qt.Vertical)
@@ -248,6 +258,12 @@ class F1Dashboard(QMainWindow):
         if 'battery' in data:
             self.setBattery(data['battery'])
             data.pop('battery')
+        if 'engine_volume' in data:
+            self.setEngineVolume(data['engine_volume'])
+            data.pop('engine_volume')
+        if 'music_volume' in data:
+            self.setMusicVolume(data['music_volume'])
+            data.pop('music_volume')
 
         # Update telemetry display with remaining fields
         display_data = {k: v for k, v in data.items()}
@@ -374,6 +390,22 @@ class F1Dashboard(QMainWindow):
     def getBattery(self):
         """Get current battery level."""
         return self.battery_gauge.getBatteryLevel()
+    
+    def setEngineVolume(self, volume_level):
+        """Set the engine volume level (0-100)."""
+        self.engine_volume_gauge.setVolumeLevel(volume_level)
+    
+    def getEngineVolume(self):
+        """Get current engine volume level."""
+        return self.engine_volume_gauge.getVolumeLevel()
+    
+    def setMusicVolume(self, volume_level):
+        """Set the music volume level (0-100)."""
+        self.music_volume_gauge.setVolumeLevel(volume_level)
+    
+    def getMusicVolume(self):
+        """Get current music volume level."""
+        return self.music_volume_gauge.getVolumeLevel()
     
     def setTune(self, tune):
         """Set the throttle value (0-1 range)."""
