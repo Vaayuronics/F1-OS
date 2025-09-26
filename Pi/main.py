@@ -37,11 +37,11 @@ def signal_handler(signum, frame):
     if arduino:
         arduino.send({"command": "stop"})
         arduino.ser.close()
-    time.sleep(1) # Give some time for devices to process stop command
+    time.sleep(3) # Give some time for devices to process stop command
     sys.exit(0)  # Exit cleanly
 
 # Set up signal handler for graceful shutdown
-signal.signal(signal.SIGINT, signal_handler)
+#signal.signal(signal.SIGINT, signal_handler)
 
 def telemetry_update_loop():
     """Continuously update telemetry data"""
@@ -146,10 +146,10 @@ if __name__ == "__main__":
         lights.turn_on("Orange")
         time.sleep(1)
         lights.turn_on("Red")
-        time.sleep(5)
-        lights.turn_off_all()
+        time.sleep(5000)
     except KeyboardInterrupt:
         print("\nInterrupted by user")
     finally:
         print("Cleaning up GPIO...")
+        lights.turn_off_all()
         lights.cleanup()
