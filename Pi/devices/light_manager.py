@@ -50,7 +50,5 @@ class LightManager:
                 return
 
     def cleanup(self):
-        for light in self.lights:
-            light.cleanup()
         # Also clean up all GPIO at once
         Light.cleanup_all()
