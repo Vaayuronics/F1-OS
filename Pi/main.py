@@ -14,7 +14,7 @@ TODO: Check to see if the usb ports on the Raspberry Pi are still not working wi
 pico = None
 arduino = None
 lights = LightManager([17, 27, 22, 23, 24, 25, 5, 6, 16], ["Green 1", "Green 2", "Green 3", "Green 4", "Blue 1", "Blue 2", "Yellow", "Orange", "Red"])
-dashboard = F1Dashboard("ui/dashboard_settings.ini", "ui/model.fbx")
+dashboard = None
 interrupt_lock = threading.Lock()
 ui_data_lock = threading.Lock()
 ui_data = None
@@ -101,10 +101,11 @@ def process_data(pico_data, arduino_data) -> dict:
 def boot():
     print("Booting up system.")
 
-    global pico, arduino
+    global pico, arduino, dashboard
 
     pico = JSONSerialReader("/dev/pico")
     arduino = JSONSerialReader("/dev/arduino")
+    dashboard = F1Dashboard("ui/dashboard_settings.ini", "ui/model.fbx")
 
     telemetry_thread = threading.Thread(target=telemetry_update_loop, daemon=True)
     telemetry_thread.start()
