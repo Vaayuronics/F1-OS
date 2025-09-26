@@ -128,25 +128,39 @@ def boot():
 
 if __name__ == "__main__":
     try:
-        #boot()
-        lights.turn_on("Green 1")
-        time.sleep(1)
-        lights.turn_on("Green 2")
-        time.sleep(1)
-        lights.turn_on("Green 3")
-        time.sleep(1)
-        lights.turn_on("Green 4")
-        time.sleep(1)
-        lights.turn_on("Blue 1")
-        time.sleep(1)
-        lights.turn_on("Blue 2")
-        time.sleep(1)
-        lights.turn_on("Yellow")
-        time.sleep(1)
-        lights.turn_on("Orange")
-        time.sleep(1)
-        lights.turn_on("Red")
-        time.sleep(5000)
+        import keyboard  # For non-blocking keyboard input
+        count = 0
+        while(True):
+            if keyboard.is_pressed('w'):
+                if count <= len(lights.get_lights()) - 1:
+                    lights.turn_on(index=count)
+                    count += 1
+                    time.sleep(1)
+            elif keyboard.is_pressed('a'):
+                if count <= len(lights.get_lights()) - 3:
+                    lights.turn_on(index=count)
+                    count += 1
+                    lights.turn_on(index=count)
+                    count += 1
+                    lights.turn_on(index=count)
+                    count += 1
+                    time.sleep(1)
+            elif keyboard.is_pressed('d'):
+                if count > 2:
+                    count -= 1
+                    lights.turn_off(index=count)
+                    count -= 1
+                    lights.turn_off(index=count)
+                    count -= 1
+                    lights.turn_off(index=count)
+                    time.sleep(1)
+            else:
+                if count > 0:
+                    count -= 1
+                    lights.turn_off(index=count)
+                    time.sleep(1)
+
+        
     except KeyboardInterrupt:
         print("\nInterrupted by user")
     finally:
