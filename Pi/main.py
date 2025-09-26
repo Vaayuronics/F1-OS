@@ -22,17 +22,22 @@ interrupted = False
 
 def signal_handler(signum, frame):
     """Handle SIGINT (Ctrl+C) gracefully"""
-    global interrupted, dashboard
+    global interrupted, dashboard, lights
     print("\nReceived interrupt signal. Shutting down gracefully...")
     with interrupt_lock:
         interrupted = True
     if dashboard:
         dashboard.close()  # Close the dashboard window
-    pico.send({"command": "stop"})
-    arduino.send({"command": "stop"})
+    if lights:
+        lights.turn_off_all()  # Turn off all lights
+        lights.cleanup()  # Clean up GPIO
+    if pico:
+        pico.send({"command": "stop"})
+        pico.ser.close()
+    if arduino:
+        arduino.send({"command": "stop"})
+        arduino.ser.close()
     time.sleep(1) # Give some time for devices to process stop command
-    pico.ser.close()
-    arduino.ser.close()
     sys.exit(0)  # Exit cleanly
 
 # Set up signal handler for graceful shutdown
@@ -122,23 +127,29 @@ def boot():
     sys.exit(exit_code)
 
 if __name__ == "__main__":
-    #boot()
-    lights.turn_on("Green 1")
-    time.sleep(1)
-    lights.turn_on("Green 2")
-    time.sleep(1)
-    lights.turn_on("Green 3")
-    time.sleep(1)
-    lights.turn_on("Green 4")
-    time.sleep(1)
-    lights.turn_on("Blue 1")
-    time.sleep(1)
-    lights.turn_on("Blue 2")
-    time.sleep(1)
-    lights.turn_on("Yellow")
-    time.sleep(1)
-    lights.turn_on("Orange")
-    time.sleep(1)
-    lights.turn_on("Red")
-    time.sleep(5)
-    lights.turn_off_all()
+    try:
+        #boot()
+        lights.turn_on("Green 1")
+        time.sleep(1)
+        lights.turn_on("Green 2")
+        time.sleep(1)
+        lights.turn_on("Green 3")
+        time.sleep(1)
+        lights.turn_on("Green 4")
+        time.sleep(1)
+        lights.turn_on("Blue 1")
+        time.sleep(1)
+        lights.turn_on("Blue 2")
+        time.sleep(1)
+        lights.turn_on("Yellow")
+        time.sleep(1)
+        lights.turn_on("Orange")
+        time.sleep(1)
+        lights.turn_on("Red")
+        time.sleep(5)
+        lights.turn_off_all()
+    except KeyboardInterrupt:
+        print("\nInterrupted by user")
+    finally:
+        print("Cleaning up GPIO...")
+        lights.cleanup()
