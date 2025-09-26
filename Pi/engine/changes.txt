@@ -1,0 +1,14 @@
+Maybe instead of having two flat audios, have different audio files
+at different rpms and use the current splicing logic to switch between files.
+the audio speed up still sounds like dogshit ;{
+
+Issue likely is due to change in pitch when resampling!!
+
+Use 
+https://stackoverflow.com/questions/41397111/how-to-change-audio-speed-without-changing-pitch
+
+Mutch better! Fuckass original audio player sounds so ass. Need to combine,
+the method of having audio in small chunks and playing them with
+using librosa to speed up without pitch shifting. Will require preprocessed
+audio as librosa is much slower than resampling. Save chunks at different
+speeds and load them to give realtime illusion.

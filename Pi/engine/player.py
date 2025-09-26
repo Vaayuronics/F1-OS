@@ -1,11 +1,11 @@
 import numpy as np
 import sounddevice as sd
-import scipy.io.wavfile as wav
-import resampy
 import queue
-import time
 import os
-from threading import Thread
+import resampy
+from threading import Thread, Lock, current_thread
+import librosa
+from scipy.io import wavfile
 
 SAMPLE_RATE = 44100  # Sample rate for audio playback
 
@@ -46,33 +46,51 @@ class EngineChunk:
             raise KeyError(f"Invalid key: {key}")
         
 class EngineAudioPlayer:
-    def __init__(self, rev_up_path, rev_down_path, chunk_duration, target = 1, max_buffer_size = 2):
-        self.rev_up_data = self._load_and_preprocess_audio(rev_up_path)
-        self.rev_down_data = self._load_and_preprocess_audio(rev_down_path)
-        # self.idle = self._load_and_preprocess_audio(idle_path)
-        # self.rev_max = self._load_and_preprocess_audio(rev_max_path)
-
+    def __init__(self, chunk_duration : float, channels : int = 2, target : int = 1, max_buffer_size : int = 10):
+        '''Smaller chunk size increases reponsiveness'''
         # Increase buffer size and add a minimum buffer threshold
         self.buffer = queue.Queue(maxsize=max_buffer_size)
         self.buffer_target = target
+        # Start in running state so writer loop is active
         self.running = True
         self.playback_started = False
-        block_size = self._calculate_optimal_blocksize(chunk_duration)
+        # Volume control (0.0 - 1.0)
+        self._volume = 1.0
+        self._prev_volume = 1.0
+        self._lock = Lock()
+        block_size = EngineAudioPlayer._calculate_optimal_blocksize(chunk_duration)
 
         self.stream = sd.OutputStream(
             samplerate=SAMPLE_RATE,
-            channels=2 if self.rev_up_data.ndim == 2 else 1,
+            channels=channels,
             dtype='float32',
             blocksize=block_size,
             latency='low'
         )
         self.stream.start()
-
+        
         self.writer_thread = Thread(target=self._buffer_writer, daemon=True)
         self.writer_thread.start()
-        print("Audio player initialized and started.")
 
-    def _calculate_optimal_blocksize(self, chunk_duration):
+    def set_volume(self, volume: float) -> None:
+        """Set output volume in range [0.0, 1.0]. Values are clamped."""
+        try:
+            v = float(volume)
+        except (TypeError, ValueError):
+            return
+        if np.isnan(v) or np.isinf(v):
+            return
+        v = max(0.0, min(1.0, v))
+        with self._lock:
+            self._volume = v
+
+    def get_volume(self) -> float:
+        """Get current output volume (0.0 - 1.0)."""
+        with self._lock:
+            return self._volume
+
+    @staticmethod
+    def _calculate_optimal_blocksize(chunk_duration: float) -> int:
         """Calculate the optimal blocksize based on typical chunk parameters"""
         # Calculate samples for a typical chunk after resampling
         samples_per_chunk = int(chunk_duration * SAMPLE_RATE)
@@ -90,76 +108,84 @@ class EngineAudioPlayer:
         if samples_per_chunk < (power_of_2 * 0.75) and power_of_2 > 2:
             power_of_2 //= 2
         
-        print(f"Optimal blocksize: {power_of_2} samples (original chunk size: {samples_per_chunk})")
         return power_of_2
 
-    def _load_and_preprocess_audio(self, path):
+    @staticmethod
+    def load_audio_wav(path : str) -> np.ndarray:
         if not os.path.exists(path):
             raise FileNotFoundError(f"Audio file not found: {path}")
         
-        sr, data = wav.read(path)
-        if data.dtype != np.float32:
-            data = data / np.iinfo(data.dtype).max
-        data = data.astype(np.float32)
+        audio_data, sample_rate = librosa.load(path, sr=None)
 
-        if sr != SAMPLE_RATE:
-            if data.ndim == 1:
-                data = resampy.resample(data, sr, SAMPLE_RATE)
+        if audio_data.dtype != np.float32:
+            audio_data = audio_data / np.iinfo(audio_data.dtype).max
+        audio_data = audio_data.astype(np.float32)
+
+        if sample_rate != SAMPLE_RATE:
+            if audio_data.ndim == 1:
+                audio_data = resampy.resample(audio_data, sample_rate, SAMPLE_RATE)
             else:
-                data = resampy.resample(data.T, sr, SAMPLE_RATE).T
-        print(f"Loaded and preprocessed audio from {path}: {data.shape} samples at {SAMPLE_RATE} Hz")
-        return data
+                audio_data = resampy.resample(audio_data.T, sample_rate, SAMPLE_RATE).T
+        return audio_data
+
+    @staticmethod
+    def stretch_audio(data : np.ndarray, speed : float) -> np.ndarray:
+        if speed == 1.0:
+            return data
+        return librosa.effects.time_stretch(data, rate=speed)
+
+    @staticmethod
+    def save_audio_wav(path : str, data : np.ndarray) -> None:
+        wavfile.write(path, SAMPLE_RATE, data)
+
+    @staticmethod
+    def get_dur(data : np.ndarray) -> float:
+        '''Get audio data duration'''
+        return len(data) / SAMPLE_RATE
+
+    @staticmethod
+    def load_audio(path : str) -> np.ndarray:
+        return np.load(path)
 
     def _buffer_writer(self):
         while self.running:
             try:
-                start_time = time.time()
                 # Only start consuming when we have enough data
                 if not self.playback_started and self.buffer.qsize() >= self.buffer_target:
                     self.playback_started = True
-                    print("Reached Target Size, starting playback.")
                 
                 if self.playback_started:
-                    print("Writing to stream...")
                     chunk = self.buffer.get(timeout=0.1)
                     self.stream.write(chunk['data'])
-                    elapsed = time.time() - start_time
-                    print(f"Chunk duration: {chunk['duration']:.4f}s, Processing time: {elapsed:.4f}s")
-                    #time.sleep(chunk['duration'] - elapsed)
             except queue.Empty:
-                print("Buffer empty, waiting for data...")
+                self.playback_started = False
                 pass
             except Exception as e:
-                print(f"Error in buffer writer: {e}")
                 self.stop()
 
-    def play_chunk(self, rev_up, start_time, speed, duration) -> EngineAudioStatus:
+    def play_chunk(self, data : np.ndarray, start_time : float, duration : float) -> EngineAudioStatus:
         if(self.running == False):
-            print("Audio player is not running.")
             return EngineAudioStatus(False, False, 0, 0, "Audio player is not running.")
-        print("Playing chunk...")
-        data = self.rev_up_data if rev_up else self.rev_down_data
-        start_sample = int(start_time * SAMPLE_RATE) # * speed
+        start_sample = int(start_time * SAMPLE_RATE)
         total_samples = data.shape[0]
-        requested_samples = int(duration * speed * SAMPLE_RATE)
+        requested_samples = int(duration * SAMPLE_RATE)
         end_sample = start_sample + requested_samples
-        print("\tCalculated Chunk")
 
         if start_sample >= total_samples:
             # End of file reached
             return EngineAudioStatus(True, False, 0, start_time)
 
         chunk = data[start_sample:min(end_sample, total_samples)]
-        print("\tChunk sliced")
 
+        '''
         # Resample for speed
         if speed != 1.0:
-            print("\tResampling chunk")
+            #print("\tResampling chunk")
             if chunk.ndim == 1:
                 chunk = resampy.resample(chunk, SAMPLE_RATE * speed, SAMPLE_RATE, parallel=True)
             else:
                 chunk = resampy.resample(chunk.T, SAMPLE_RATE * speed, SAMPLE_RATE, parallel=True).T
-            print("\tChunk resampled, applying fade")
+            #print("\tChunk resampled, applying fade")
 
             # Apply very small fade in/out to reduce clicking
             fade_samples = min(int(0.005 * SAMPLE_RATE), len(chunk) // 8)  # 5ms or 1/8 of chunk
@@ -173,100 +199,49 @@ class EngineAudioPlayer:
                 else:  # Stereo
                     chunk[:fade_samples] *= fade_in.reshape(-1, 1)
                     chunk[-fade_samples:] *= fade_out.reshape(-1, 1)
-                print("\tFade applied")
+                #print("\tFade applied")
+        '''
 
-        print("\tEnsuring chunk is contiguous")
+        # Get the volume atomically, if not locked use previous value to prevent stutter
+        if(not self._lock.locked()):
+            with self._lock:
+                vol = self._volume
+                self._prev_volume = vol
+        else:
+            vol = self._prev_volume
+        # Apply volume scaling
+        if vol != 1.0:
+            chunk = (chunk * np.float32(vol)).astype(np.float32, copy=False)
+
         # Make sure data is contiguous when putting in buffer
         chunk = np.ascontiguousarray(chunk)
     
-        print("\tPutting chunk in buffer")
         dropped = False
         try:
             self.buffer.put_nowait(EngineChunk(chunk, duration))
-            print("\t\tChunk added to buffer")
         except queue.Full:
             dropped = True
-            print("\t\tBuffer full, dropping chunk")
 
-        print("\t\tBuffer size:", self.buffer.qsize())
-
-        print("\tDone")
         return EngineAudioStatus(False, dropped, duration, start_time + duration)
 
     def stop(self):
+        # Signal writer thread to stop and clean up audio stream safely
         self.running = False
-        self.writer_thread.join()
-        self.stream.stop()
-        self.stream.close()
-
-import tkinter as tk
-class EngineAudioUI:
-    def __init__(self, root):
-        self.root = root
-        self.root.title("Engine Audio Control")
-        
-        # Initial speed value
-        self.sp = 1
-        
-        # Create a slider for speed
-        self.speed_slider = tk.Scale(
-            root, 
-            from_=0.25, 
-            to=3.0, 
-            resolution=0.01,
-            orient=tk.HORIZONTAL, 
-            label="Speed",
-            length=300,
-            command=self.update_speed
-        )
-        self.speed_slider.set(self.sp)
-        self.speed_slider.pack(padx=20, pady=20)
-        
-        # Audio player and status variables
-        self.running = True
-        self.player = None
-        self.audio_thread = Thread(target=self.run_audio, daemon=True)
-        self.audio_thread.start()
-        
-        # Set up cleanup on window close
-        self.root.protocol("WM_DELETE_WINDOW", self.on_closing)
-        
-    def update_speed(self, val):
-        self.sp = float(val)
-        print(f"Speed updated to: {self.sp}")
-        
-    def run_audio(self):
-        counter = 0.0
-        dur = 0.05
-        up = True
-        self.player = EngineAudioPlayer("Pi/engine/audio/accel.wav", "Pi/engine/audio/decel.wav", dur)
-        loop = False
-        
-        while self.running:
-            # Process chunk
-            done = self.player.play_chunk(rev_up=up, start_time=counter, speed=self.sp, duration=dur)
-            if(done['error']):
-                print(f"Error: {done['error']}")
-                break
-            
-            # Update for next iteration
-            if not done['dropped']:
-                counter += done["waitTime"]
-
-            if done['done']:
-                print("End of file reached.")
-                counter = 0.0
-                up = not up
-                
-    def on_closing(self):
-        self.running = False
-        if self.player:
-            self.player.stop()
-        self.root.destroy()
-
-
-# Example usage - only run this if the script is executed directly
-if __name__ == "__main__":
-    root = tk.Tk()
-    app = EngineAudioUI(root)
-    root.mainloop()
+        self.playback_started = False
+        # Avoid deadlocking by joining from a different thread
+        try:
+            if self.writer_thread and current_thread() is not self.writer_thread:
+                self.writer_thread.join(timeout=1.0)
+        except Exception:
+            pass
+        # Stop/close stream defensively
+        try:
+            if self.stream:
+                self.stream.stop()
+        except Exception:
+            pass
+        try:
+            if self.stream:
+                self.stream.close()
+        except Exception:
+            pass

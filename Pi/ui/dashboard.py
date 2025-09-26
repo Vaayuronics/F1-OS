@@ -1,16 +1,21 @@
 from PySide6.QtWidgets import (QMainWindow, QFrame, QSplitter, 
                               QSizePolicy, QWidget, QVBoxLayout, QLabel, QHBoxLayout, QMessageBox, QApplication, QScrollArea)
-from PySide6.QtCore import Qt, QSettings, QSize, QTimer, QMutex
+from PySide6.QtCore import Qt, QSettings, QSize, Signal, QTimer
 from ui.gauge import GaugeWidget
 from ui.car3d import Car3DWidget
 from ui.battery_gauge import BatteryGaugeWidget
+from ui.volume_gauge import VolumeGaugeWidget
 import os
 import sys
 
+REFRESH_RATE = 1/58
+
 class F1Dashboard(QMainWindow):
     """Main dashboard window that displays gauges and car visualization."""
+    # Signal to receive data dicts from worker threads safely (queued connection)
+    data_signal = Signal(dict)
     
-    def __init__(self, settings_file_path: str = None, model_path: str = None, title=""):
+    def __init__(self, settings_file_path: str = None, model_path: str = None):
         """Initialize the dashboard with all widgets and layouts.""" 
         # Create QApplication if it doesn't exist
         if not QApplication.instance():
@@ -156,19 +161,28 @@ class F1Dashboard(QMainWindow):
         self.telemetry_scroll.setWidget(self.telemetry_content_widget)
         telemetry_main_layout.addWidget(self.telemetry_scroll)
         
+        # Create volume gauges
+        self.engine_volume_gauge = VolumeGaugeWidget("ENG", "engine")
+        self.engine_volume_gauge.setVolumeLevel(75)  # Default engine volume
+        
+        self.music_volume_gauge = VolumeGaugeWidget("MUS", "speaker") 
+        self.music_volume_gauge.setVolumeLevel(60)  # Default music volume
+        
         # Create battery gauge
         self.battery_gauge = BatteryGaugeWidget()
         self.battery_gauge.setBatteryLevel(85)  # Default battery level
         
-        # Create horizontal splitter for bottom section (telemetry + battery)
+        # Create horizontal splitter for bottom section (telemetry + volume bars + battery)
         self.bottom_splitter = QSplitter(Qt.Horizontal)
         self.bottom_splitter.setHandleWidth(8)
         self.bottom_splitter.setChildrenCollapsible(False)
-        self.bottom_splitter.addWidget(self.telemetry_frame)  # Telemetry on left
-        self.bottom_splitter.addWidget(self.battery_gauge)    # Battery on right
+        self.bottom_splitter.addWidget(self.telemetry_frame)     # Telemetry on left
+        self.bottom_splitter.addWidget(self.engine_volume_gauge) # Engine volume 
+        self.bottom_splitter.addWidget(self.music_volume_gauge)  # Music volume
+        self.bottom_splitter.addWidget(self.battery_gauge)       # Battery on right
         
-        # Set initial sizes for bottom splitter (adjust for smaller battery widget)
-        self.bottom_splitter.setSizes([300, 80])  # Reduced battery width from 150 to 80
+        # Set initial sizes for bottom splitter (telemetry + 3 narrow gauges)
+        self.bottom_splitter.setSizes([240, 60, 60, 60])  # More space for telemetry, equal space for gauges
         
         # Create a new vertical splitter to separate main content from bottom section
         self.vertical_splitter = QSplitter(Qt.Vertical)
@@ -206,58 +220,70 @@ class F1Dashboard(QMainWindow):
         self._setup_window_geometry()
         self._connect_geometry_events()
         
-        # Initialize thread-safe data sharing
-        self.data_mutex = QMutex()
-        self.shared_data = {}
+    # Connect signal for immediate cross-thread UI updates
+        self.data_signal.connect(self._apply_data_dict)
+        
+        # Initialize startup animation variables
+        self.startup_animation_active = False
+        self.startup_timer = QTimer()
+        self.startup_timer.timeout.connect(self._update_startup_animation)
+        self.animation_step = 0
+        self.animation_phase = 0  # 0: ramp up, 1: oscillate
+        self.animation_start_time = 0
     
     def run(self):
         """Show the dashboard and run the application."""
         self.show()
-        
-        # Set up periodic updates from thread-safe data
-        self.shared_timer = QTimer()
-        self.shared_timer.timeout.connect(self.update_from_shared_data)
-        self.shared_timer.start(50)  # Check every 50ms (20Hz)
-        
+        # Start the startup animation after showing
+        self.start_startup_animation()
         return self.app.exec()
     
     def set_data_thread_safe(self, data_dict):
-        """Thread-safe method to update dashboard data from external threads."""
-        self.data_mutex.lock()
-        try:
-            self.shared_data.update(data_dict)
-        finally:
-            self.data_mutex.unlock()
+        """Thread-safe method to update dashboard data from external threads.
+
+        Immediately emit a signal so updates are applied on the UI thread.
+        """
+        self.data_signal.emit(dict(data_dict))
     
-    def update_from_shared_data(self):
-        """Update dashboard from thread-safe shared data."""
-        self.data_mutex.lock()
-        try:
-            data = self.shared_data.copy()
-            self.shared_data.clear()  # Clear after reading
-        finally:
-            self.data_mutex.unlock()
-        
-        # Update dashboard with the data
-        if data:
-            if 'rpm' in data:
-                self.setRPM(data['rpm'])
-            if 'speed' in data:
-                self.setSpeed(data['speed'])
-            if 'throttle' in data:
+    def _apply_data_dict(self, data: dict):
+        """Apply telemetry data to widgets. Must run on the UI thread."""
+        if 'rpm' in data:
+            self.setRPM(data['rpm'])
+            data.pop('rpm')
+        if 'speed' in data:
+            self.setSpeed(data['speed'])
+            data.pop('speed')
+        if 'throttle' in data:
+            if not self.startup_animation_active:
                 self.setThrottle(data['throttle'])
-            if 'tune' in data:
+                data.pop('throttle')
+            else:
+                data.pop('throttle')  # Remove but don't apply during animation
+        if 'tune' in data:
+            if not self.startup_animation_active:
                 self.setTune(data['tune'])
-            if 'wheel_rotation' in data:
-                self.setWheelRotation(data['wheel_rotation'])
-            if 'gear' in data:
-                self.setGear(data['gear'])
-            if 'battery' in data:
-                self.setBattery(data['battery'])
-            
-            # Update telemetry display (exclude battery since it has its own widget)
-            display_data = {k: v for k, v in data.items() if k != 'battery'}
-            self.updateTelemetryDisplay(display_data)
+                data.pop('tune')
+            else:
+                data.pop('tune')  # Remove but don't apply during animation
+        if 'wheel_rotation' in data:
+            self.setWheelRotation(data['wheel_rotation'])
+            data.pop('wheel_rotation')
+        if 'gear' in data:
+            self.setGear(data['gear'])
+            data.pop('gear')
+        if 'battery' in data:
+            self.setBattery(data['battery'])
+            data.pop('battery')
+        if 'engine_volume' in data:
+            self.setEngineVolume(data['engine_volume'])
+            data.pop('engine_volume')
+        if 'music_volume' in data:
+            self.setMusicVolume(data['music_volume'])
+            data.pop('music_volume')
+
+        # Update telemetry display with remaining fields
+        display_data = {k: v for k, v in data.items()}
+        self.updateTelemetryDisplay(display_data)
     
     def enable_fullscreen(self):
         """Enable borderless fullscreen mode suitable for Raspberry Pi."""
@@ -380,6 +406,22 @@ class F1Dashboard(QMainWindow):
     def getBattery(self):
         """Get current battery level."""
         return self.battery_gauge.getBatteryLevel()
+    
+    def setEngineVolume(self, volume_level):
+        """Set the engine volume level (0-100)."""
+        self.engine_volume_gauge.setVolumeLevel(volume_level)
+    
+    def getEngineVolume(self):
+        """Get current engine volume level."""
+        return self.engine_volume_gauge.getVolumeLevel()
+    
+    def setMusicVolume(self, volume_level):
+        """Set the music volume level (0-100)."""
+        self.music_volume_gauge.setVolumeLevel(volume_level)
+    
+    def getMusicVolume(self):
+        """Get current music volume level."""
+        return self.music_volume_gauge.getVolumeLevel()
     
     def setTune(self, tune):
         """Set the throttle value (0-1 range)."""
@@ -654,3 +696,74 @@ class F1Dashboard(QMainWindow):
                 self.save_splitter_settings()
         
         # Reset other view elements as needed
+    
+    def start_startup_animation(self):
+        """Start the startup animation sequence."""
+        import time
+        self.startup_animation_active = True
+        self.animation_step = 0
+        self.animation_phase = 0
+        self.animation_start_time = time.time()
+        self.startup_timer.start(16)  # ~60fps animation (16ms intervals)
+        print("Starting startup animation...")
+    
+    def _update_startup_animation(self):
+        """Update the startup animation each frame."""
+        import time
+        current_time = time.time()
+        elapsed = current_time - self.animation_start_time
+        
+        if self.animation_phase == 0:
+            # Phase 1: Ramp up from 0 to 100% over 2 seconds
+            if elapsed < 2.0:
+                progress = elapsed / 2.0  # 0.0 to 1.0
+                throttle_value = progress  # 0.0 to 1.0
+                tune_value = progress     # 0.0 to 1.0
+                
+                # Apply smooth easing (ease-out)
+                throttle_value = 1 - (1 - throttle_value) ** 3
+                tune_value = 1 - (1 - tune_value) ** 3
+                
+                # Update the gauges
+                self.setThrottle(throttle_value)
+                self.setTune(tune_value)
+            else:
+                # Move to phase 2
+                self.animation_phase = 1
+                self.animation_start_time = current_time  # Reset timer for phase 2
+                
+        elif self.animation_phase == 1:
+            # Phase 2: Oscillate between 80-100% for 4 seconds
+            if elapsed < 4.0:
+                # Create oscillation between 0.8 and 1.0
+                import math
+                oscillation_frequency = 2.0  # 2 cycles per second
+                sine_wave = math.sin(elapsed * oscillation_frequency * 2 * math.pi)
+                
+                # Map sine wave (-1 to 1) to range (0.8 to 1.0)
+                base_value = 0.9  # Center point
+                amplitude = 0.1   # ±10% oscillation
+                throttle_value = base_value + (sine_wave * amplitude)
+                tune_value = base_value + (sine_wave * amplitude * 0.8)  # Slightly different for variety
+                
+                # Update the gauges
+                self.setThrottle(throttle_value)
+                self.setTune(tune_value)
+            else:
+                # Animation complete
+                self.end_startup_animation()
+    
+    def end_startup_animation(self):
+        """End the startup animation and return to normal operation."""
+        self.startup_timer.stop()
+        self.startup_animation_active = False
+        
+        # Reset to default values
+        self.setThrottle(0.0)
+        self.setTune(0.0)
+        
+        print("Startup animation complete!")
+    
+    def is_animation_active(self):
+        """Check if startup animation is currently running."""
+        return self.startup_animation_active
