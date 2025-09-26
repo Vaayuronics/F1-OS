@@ -11,8 +11,8 @@ from devices.light_manager import LightManager
 TODO: Check to see if the usb ports on the Raspberry Pi are still not working with tty.
 '''
 
-pico = JSONSerialReader("/dev/pico")
-arduino = JSONSerialReader("/dev/arduino")
+pico = None
+arduino = None
 lights = LightManager([17], ["Green 1"])
 dashboard = F1Dashboard("ui/dashboard_settings.ini", "ui/model.fbx")
 interrupt_lock = threading.Lock()
@@ -101,6 +101,11 @@ def process_data(pico_data, arduino_data) -> dict:
 def boot():
     print("Booting up system.")
 
+    global pico, arduino
+
+    pico = JSONSerialReader("/dev/pico")
+    arduino = JSONSerialReader("/dev/arduino")
+
     telemetry_thread = threading.Thread(target=telemetry_update_loop, daemon=True)
     telemetry_thread.start()
 
@@ -118,5 +123,5 @@ def boot():
 if __name__ == "__main__":
     #boot()
     lights.turn_on("Green 1")
-    time.sleep(5)
+    time.sleep(1)
     lights.turn_off("Green 1")
