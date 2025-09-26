@@ -1,6 +1,6 @@
 from PySide6.QtWidgets import (QMainWindow, QFrame, QSplitter, 
                               QSizePolicy, QWidget, QVBoxLayout, QLabel, QHBoxLayout, QMessageBox, QApplication, QScrollArea)
-from PySide6.QtCore import Qt, QSettings, QSize, Signal
+from PySide6.QtCore import Qt, QSettings, QSize, Signal, QTimer
 from ui.gauge import GaugeWidget
 from ui.car3d import Car3DWidget
 from ui.battery_gauge import BatteryGaugeWidget
@@ -15,7 +15,7 @@ class F1Dashboard(QMainWindow):
     # Signal to receive data dicts from worker threads safely (queued connection)
     data_signal = Signal(dict)
     
-    def __init__(self, settings_file_path: str = None, model_path: str = None, title=""):
+    def __init__(self, settings_file_path: str = None, model_path: str = None):
         """Initialize the dashboard with all widgets and layouts.""" 
         # Create QApplication if it doesn't exist
         if not QApplication.instance():
@@ -222,10 +222,20 @@ class F1Dashboard(QMainWindow):
         
     # Connect signal for immediate cross-thread UI updates
         self.data_signal.connect(self._apply_data_dict)
+        
+        # Initialize startup animation variables
+        self.startup_animation_active = False
+        self.startup_timer = QTimer()
+        self.startup_timer.timeout.connect(self._update_startup_animation)
+        self.animation_step = 0
+        self.animation_phase = 0  # 0: ramp up, 1: oscillate
+        self.animation_start_time = 0
     
     def run(self):
         """Show the dashboard and run the application."""
         self.show()
+        # Start the startup animation after showing
+        self.start_startup_animation()
         return self.app.exec()
     
     def set_data_thread_safe(self, data_dict):
@@ -244,11 +254,17 @@ class F1Dashboard(QMainWindow):
             self.setSpeed(data['speed'])
             data.pop('speed')
         if 'throttle' in data:
-            self.setThrottle(data['throttle'])
-            data.pop('throttle')
+            if not self.startup_animation_active:
+                self.setThrottle(data['throttle'])
+                data.pop('throttle')
+            else:
+                data.pop('throttle')  # Remove but don't apply during animation
         if 'tune' in data:
-            self.setTune(data['tune'])
-            data.pop('tune')
+            if not self.startup_animation_active:
+                self.setTune(data['tune'])
+                data.pop('tune')
+            else:
+                data.pop('tune')  # Remove but don't apply during animation
         if 'wheel_rotation' in data:
             self.setWheelRotation(data['wheel_rotation'])
             data.pop('wheel_rotation')
@@ -680,3 +696,74 @@ class F1Dashboard(QMainWindow):
                 self.save_splitter_settings()
         
         # Reset other view elements as needed
+    
+    def start_startup_animation(self):
+        """Start the startup animation sequence."""
+        import time
+        self.startup_animation_active = True
+        self.animation_step = 0
+        self.animation_phase = 0
+        self.animation_start_time = time.time()
+        self.startup_timer.start(16)  # ~60fps animation (16ms intervals)
+        print("Starting startup animation...")
+    
+    def _update_startup_animation(self):
+        """Update the startup animation each frame."""
+        import time
+        current_time = time.time()
+        elapsed = current_time - self.animation_start_time
+        
+        if self.animation_phase == 0:
+            # Phase 1: Ramp up from 0 to 100% over 2 seconds
+            if elapsed < 2.0:
+                progress = elapsed / 2.0  # 0.0 to 1.0
+                throttle_value = progress  # 0.0 to 1.0
+                tune_value = progress     # 0.0 to 1.0
+                
+                # Apply smooth easing (ease-out)
+                throttle_value = 1 - (1 - throttle_value) ** 3
+                tune_value = 1 - (1 - tune_value) ** 3
+                
+                # Update the gauges
+                self.setThrottle(throttle_value)
+                self.setTune(tune_value)
+            else:
+                # Move to phase 2
+                self.animation_phase = 1
+                self.animation_start_time = current_time  # Reset timer for phase 2
+                
+        elif self.animation_phase == 1:
+            # Phase 2: Oscillate between 80-100% for 4 seconds
+            if elapsed < 4.0:
+                # Create oscillation between 0.8 and 1.0
+                import math
+                oscillation_frequency = 2.0  # 2 cycles per second
+                sine_wave = math.sin(elapsed * oscillation_frequency * 2 * math.pi)
+                
+                # Map sine wave (-1 to 1) to range (0.8 to 1.0)
+                base_value = 0.9  # Center point
+                amplitude = 0.1   # ±10% oscillation
+                throttle_value = base_value + (sine_wave * amplitude)
+                tune_value = base_value + (sine_wave * amplitude * 0.8)  # Slightly different for variety
+                
+                # Update the gauges
+                self.setThrottle(throttle_value)
+                self.setTune(tune_value)
+            else:
+                # Animation complete
+                self.end_startup_animation()
+    
+    def end_startup_animation(self):
+        """End the startup animation and return to normal operation."""
+        self.startup_timer.stop()
+        self.startup_animation_active = False
+        
+        # Reset to default values
+        self.setThrottle(0.0)
+        self.setTune(0.0)
+        
+        print("Startup animation complete!")
+    
+    def is_animation_active(self):
+        """Check if startup animation is currently running."""
+        return self.startup_animation_active

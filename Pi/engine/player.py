@@ -1,10 +1,11 @@
 import numpy as np
 import sounddevice as sd
-import scipy.io.wavfile as wav
 import queue
 import os
 import resampy
 from threading import Thread, Lock, current_thread
+import librosa
+from scipy.io import wavfile
 
 SAMPLE_RATE = 44100  # Sample rate for audio playback
 
@@ -45,7 +46,7 @@ class EngineChunk:
             raise KeyError(f"Invalid key: {key}")
         
 class EngineAudioPlayer:
-    def __init__(self, chunk_duration : int, channels : int = 2, target : int = 1, max_buffer_size : int = 10):
+    def __init__(self, chunk_duration : float, channels : int = 2, target : int = 1, max_buffer_size : int = 10):
         '''Smaller chunk size increases reponsiveness'''
         # Increase buffer size and add a minimum buffer threshold
         self.buffer = queue.Queue(maxsize=max_buffer_size)
@@ -55,8 +56,9 @@ class EngineAudioPlayer:
         self.playback_started = False
         # Volume control (0.0 - 1.0)
         self._volume = 1.0
+        self._prev_volume = 1.0
         self._lock = Lock()
-        block_size = self._calculate_optimal_blocksize(chunk_duration)
+        block_size = EngineAudioPlayer._calculate_optimal_blocksize(chunk_duration)
 
         self.stream = sd.OutputStream(
             samplerate=SAMPLE_RATE,
@@ -87,7 +89,8 @@ class EngineAudioPlayer:
         with self._lock:
             return self._volume
 
-    def _calculate_optimal_blocksize(self, chunk_duration : float) -> int:
+    @staticmethod
+    def _calculate_optimal_blocksize(chunk_duration: float) -> int:
         """Calculate the optimal blocksize based on typical chunk parameters"""
         # Calculate samples for a typical chunk after resampling
         samples_per_chunk = int(chunk_duration * SAMPLE_RATE)
@@ -108,21 +111,41 @@ class EngineAudioPlayer:
         return power_of_2
 
     @staticmethod
-    def load_and_preprocess_audio(path : str) -> np.ndarray:
+    def load_audio_wav(path : str) -> np.ndarray:
         if not os.path.exists(path):
             raise FileNotFoundError(f"Audio file not found: {path}")
         
-        sr, data = wav.read(path)
-        if data.dtype != np.float32:
-            data = data / np.iinfo(data.dtype).max
-        data = data.astype(np.float32)
+        audio_data, sample_rate = librosa.load(path, sr=None)
 
-        if sr != SAMPLE_RATE:
-            if data.ndim == 1:
-                data = resampy.resample(data, sr, SAMPLE_RATE)
+        if audio_data.dtype != np.float32:
+            audio_data = audio_data / np.iinfo(audio_data.dtype).max
+        audio_data = audio_data.astype(np.float32)
+
+        if sample_rate != SAMPLE_RATE:
+            if audio_data.ndim == 1:
+                audio_data = resampy.resample(audio_data, sample_rate, SAMPLE_RATE)
             else:
-                data = resampy.resample(data.T, sr, SAMPLE_RATE).T
-        return data
+                audio_data = resampy.resample(audio_data.T, sample_rate, SAMPLE_RATE).T
+        return audio_data
+
+    @staticmethod
+    def stretch_audio(data : np.ndarray, speed : float) -> np.ndarray:
+        if speed == 1.0:
+            return data
+        return librosa.effects.time_stretch(data, rate=speed)
+
+    @staticmethod
+    def save_audio_wav(path : str, data : np.ndarray) -> None:
+        wavfile.write(path, SAMPLE_RATE, data)
+
+    @staticmethod
+    def get_dur(data : np.ndarray) -> float:
+        '''Get audio data duration'''
+        return len(data) / SAMPLE_RATE
+
+    @staticmethod
+    def load_audio(path : str) -> np.ndarray:
+        return np.load(path)
 
     def _buffer_writer(self):
         while self.running:
@@ -133,16 +156,7 @@ class EngineAudioPlayer:
                 
                 if self.playback_started:
                     chunk = self.buffer.get(timeout=0.1)
-                    # Snapshot the volume atomically
-                    with self._lock:
-                        vol = self._volume
-                    data = chunk['data']
-                    # Apply volume scaling at write time for instant effect
-                    if vol != 1.0:
-                        out = (data * np.float32(vol)).astype(np.float32, copy=False)
-                    else:
-                        out = data
-                    self.stream.write(out)
+                    self.stream.write(chunk['data'])
             except queue.Empty:
                 self.playback_started = False
                 pass
@@ -187,6 +201,17 @@ class EngineAudioPlayer:
                     chunk[-fade_samples:] *= fade_out.reshape(-1, 1)
                 #print("\tFade applied")
         '''
+
+        # Get the volume atomically, if not locked use previous value to prevent stutter
+        if(not self._lock.locked()):
+            with self._lock:
+                vol = self._volume
+                self._prev_volume = vol
+        else:
+            vol = self._prev_volume
+        # Apply volume scaling
+        if vol != 1.0:
+            chunk = (chunk * np.float32(vol)).astype(np.float32, copy=False)
 
         # Make sure data is contiguous when putting in buffer
         chunk = np.ascontiguousarray(chunk)

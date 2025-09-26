@@ -5,6 +5,7 @@ import threading
 import sys
 import signal 
 from ui.dashboard import F1Dashboard, REFRESH_RATE
+from devices.light_manager import LightManager
 
 '''
 TODO: Check to see if the usb ports on the Raspberry Pi are still not working with tty.
@@ -12,7 +13,7 @@ TODO: Check to see if the usb ports on the Raspberry Pi are still not working wi
 
 pico = JSONSerialReader("/dev/pico")
 arduino = JSONSerialReader("/dev/arduino")
-music_player = 
+lights = LightManager([17], ["Green 1"])
 dashboard = F1Dashboard("ui/dashboard_settings.ini", "ui/model.fbx")
 interrupt_lock = threading.Lock()
 ui_data_lock = threading.Lock()
@@ -97,11 +98,14 @@ def process_data(pico_data, arduino_data) -> dict:
             combined['speed'] = arduino_data['speed']
     return combined
 
-if __name__ == "__main__":
+def boot():
     print("Booting up system.")
 
     telemetry_thread = threading.Thread(target=telemetry_update_loop, daemon=True)
     telemetry_thread.start()
+
+    hardware_thread = threading.Thread(target=hardware_loop, daemon=True)
+    hardware_thread.start()
 
     dashboard.enable_fullscreen()
     exit_code = dashboard.run()
@@ -110,3 +114,7 @@ if __name__ == "__main__":
         exit_code = dashboard.run()
     print("Application finished with exit code:", exit_code)
     sys.exit(exit_code)
+
+if __name__ == "__main__":
+    #boot()
+    lights.turn_on("Green 1")
