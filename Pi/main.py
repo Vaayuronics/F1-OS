@@ -118,3 +118,5 @@ def boot():
 if __name__ == "__main__":
     #boot()
     lights.turn_on("Green 1")
+    time.sleep(5)
+    lights.turn_off("Green 1")
