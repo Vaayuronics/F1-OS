@@ -22,7 +22,6 @@ class Light:
     def turn_off(self):
         GPIO.output(self.pin, GPIO.LOW)
         self.state = False
-        print(f"Light '{self.name}' on pin {self.pin} turned OFF")
 
     def toggle(self):
         if self.state:
