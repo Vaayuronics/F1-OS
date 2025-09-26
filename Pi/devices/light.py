@@ -16,18 +16,13 @@ class Light:
         self.state = False
 
     def turn_on(self):
-        try:
-            GPIO.output(self.pin, GPIO.HIGH)
-            self.state = True
-            print(f"Light '{self.name}' on pin {self.pin} turned ON")
-        except Exception as e:
-            print(f"Error turning on light '{self.name}' on pin {self.pin}: {e}")
+        GPIO.output(self.pin, GPIO.HIGH)
+        self.state = True
 
     def turn_off(self):
-        try:
-            GPIO.output(self.pin, GPIO.LOW)
-            self.state = False
-            print(f"Light '{self.name}' on pin {self.pin} turned OFF")
+        GPIO.output(self.pin, GPIO.LOW)
+        self.state = False
+        print(f"Light '{self.name}' on pin {self.pin} turned OFF")
 
     def toggle(self):
         if self.state:
