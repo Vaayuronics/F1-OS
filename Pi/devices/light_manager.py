@@ -32,6 +32,17 @@ class LightManager:
         for light in self.lights:
             light.toggle()
 
+    def toggle(self, name: str = None, index: int = None):
+        if name:
+            for light in self.lights:
+                if light.get_name() == name:
+                    light.toggle()
+                    return
+        if index:
+            if 0 <= index < len(self.lights):
+                self.lights[index].toggle()
+                return
+
     def turn_on(self, name: str = None, index: int = None):
         if name:
             for light in self.lights:
@@ -48,6 +59,9 @@ class LightManager:
             if light.get_name() == name:
                 light.turn_off()
                 return
+            
+    def __len__(self):
+        return len(self.lights)
 
     def cleanup(self):
         # Also clean up all GPIO at once

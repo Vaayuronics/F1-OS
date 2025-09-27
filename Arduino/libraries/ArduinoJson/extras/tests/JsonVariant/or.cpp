@@ -113,7 +113,6 @@ TEST_CASE("JsonVariant::operator|()") {
   }
 
   SECTION("double | int") {
-    // NOTE: changed the behavior to fix #981
     variant.set(666.0);
     int result = variant | 42;
     REQUIRE(result == 42);

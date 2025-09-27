@@ -8,45 +8,9 @@ import librosa
 from scipy.io import wavfile
 
 SAMPLE_RATE = 44100  # Sample rate for audio playback
-
-class EngineAudioStatus:
-    '''Class to represent the status of the audio engine.'''
-    def __init__(self, end_of_file, dropped, waitTime, position, error=None):
-        self.end_of_file = end_of_file
-        self.dropped = dropped
-        self.waitTime = waitTime
-        self.position = position
-        self.error = error
-        
-    def __getitem__(self, key):
-        if key == 'done':
-            return self.end_of_file
-        elif key == 'dropped':
-            return self.dropped
-        elif key == 'waitTime':
-            return self.waitTime
-        elif key == 'position':
-            return self.position
-        elif key == 'error':
-            return self.error
-        else:
-            raise KeyError(f"Invalid key: {key}")
-        
-class EngineChunk:
-    def __init__(self, data, duration):
-        self.data = data
-        self.duration = duration
-
-    def __getitem__(self, key):
-        if key == 'data':
-            return self.data
-        elif key == 'duration':
-            return self.duration
-        else:
-            raise KeyError(f"Invalid key: {key}")
-        
+   
 class EngineAudioPlayer:
-    def __init__(self, chunk_duration : float, channels : int = 2, target : int = 1, max_buffer_size : int = 10):
+    def __init__(self, chunk_duration : float = 1.0, channels : int = 2, target : int = 1, max_buffer_size : int = 10):
         '''Smaller chunk size increases reponsiveness'''
         # Increase buffer size and add a minimum buffer threshold
         self.buffer = queue.Queue(maxsize=max_buffer_size)
@@ -57,7 +21,9 @@ class EngineAudioPlayer:
         # Volume control (0.0 - 1.0)
         self._volume = 1.0
         self._prev_volume = 1.0
-        self._lock = Lock()
+        self.vol_lock = Lock()
+        self.queue_lock = Lock()
+        self.running_lock = Lock()
         block_size = EngineAudioPlayer._calculate_optimal_blocksize(chunk_duration)
 
         self.stream = sd.OutputStream(
@@ -81,12 +47,12 @@ class EngineAudioPlayer:
         if np.isnan(v) or np.isinf(v):
             return
         v = max(0.0, min(1.0, v))
-        with self._lock:
+        with self.vol_lock:
             self._volume = v
 
     def get_volume(self) -> float:
         """Get current output volume (0.0 - 1.0)."""
-        with self._lock:
+        with self.vol_lock:
             return self._volume
 
     @staticmethod
@@ -111,28 +77,69 @@ class EngineAudioPlayer:
         return power_of_2
 
     @staticmethod
-    def load_audio_wav(path : str) -> np.ndarray:
+    def load_audio_wav(path : str) -> tuple[np.ndarray, int]:
         if not os.path.exists(path):
             raise FileNotFoundError(f"Audio file not found: {path}")
         
-        audio_data, sample_rate = librosa.load(path, sr=None)
+        audio_data, sample_rate = librosa.load(path, sr=None, mono=False)  # Don't force mono
 
         if audio_data.dtype != np.float32:
-            audio_data = audio_data / np.iinfo(audio_data.dtype).max
-        audio_data = audio_data.astype(np.float32)
+            if np.issubdtype(audio_data.dtype, np.integer):
+                audio_data = audio_data / np.iinfo(audio_data.dtype).max
+            audio_data = audio_data.astype(np.float32)
+
+        # Determine number of channels
+        if audio_data.ndim == 1:
+            channels = 1
+        else:
+            # librosa loads multi-channel as (channels, samples)
+            channels = audio_data.shape[0]
+            # If we have more samples than channels, transpose to (samples, channels)
+            if audio_data.shape[0] > audio_data.shape[1]:
+                audio_data = audio_data.T
+                channels = audio_data.shape[1]
 
         if sample_rate != SAMPLE_RATE:
             if audio_data.ndim == 1:
                 audio_data = resampy.resample(audio_data, sample_rate, SAMPLE_RATE)
             else:
-                audio_data = resampy.resample(audio_data.T, sample_rate, SAMPLE_RATE).T
-        return audio_data
+                # For multi-channel, resample each channel
+                resampled = []
+                for i in range(channels):
+                    resampled.append(resampy.resample(audio_data[:, i], sample_rate, SAMPLE_RATE))
+                audio_data = np.column_stack(resampled)
+    
+        return audio_data, channels
 
     @staticmethod
-    def stretch_audio(data : np.ndarray, speed : float) -> np.ndarray:
+    def transform_audio(data : np.ndarray, start_time : float, duration : float,speed : float) -> np.ndarray:
+        '''Change audio speed without affecting pitch\n
+        Also get the specific timing of the audio data'''
+        start_sample = int(start_time * SAMPLE_RATE)
+        
+        # Get total samples - handle both mono and multi-channel audio
+        if data.ndim == 1:
+            total_samples = data.shape[0]
+        else:
+            total_samples = data.shape[1]  # For multi-channel (channels, samples)
+            
+        requested_samples = int(duration * SAMPLE_RATE)
+        end_sample = start_sample + requested_samples
+
+        if start_sample >= total_samples:
+            # End of file reached
+            return None
+
+        # Slice the audio data properly
+        if data.ndim == 1:
+            sliced_data = data[start_sample:min(end_sample, total_samples)]
+        else:
+            sliced_data = data[:, start_sample:min(end_sample, total_samples)]
+
         if speed == 1.0:
-            return data
-        return librosa.effects.time_stretch(data, rate=speed)
+            return sliced_data
+        
+        return librosa.effects.time_stretch(sliced_data, rate=speed)
 
     @staticmethod
     def save_audio_wav(path : str, data : np.ndarray) -> None:
@@ -141,70 +148,78 @@ class EngineAudioPlayer:
     @staticmethod
     def get_dur(data : np.ndarray) -> float:
         '''Get audio data duration'''
-        return len(data) / SAMPLE_RATE
+        if data.ndim == 1:
+            return len(data) / SAMPLE_RATE
+        else:
+            # For multi-channel audio, get the number of samples (largest dimension)
+            return data.shape[1] / SAMPLE_RATE
 
     @staticmethod
     def load_audio(path : str) -> np.ndarray:
+        '''Load a npy file containing audio data'''
         return np.load(path)
 
+    @staticmethod
+    def save_audio(path : str, data : np.ndarray) -> None:
+        '''Save audio data to a npy file'''
+        np.save(path, data)
+
     def _buffer_writer(self):
-        while self.running:
+        while True:
+            with self.running_lock:
+                if not self.running:
+                    break
+            
             try:
-                # Only start consuming when we have enough data
-                if not self.playback_started and self.buffer.qsize() >= self.buffer_target:
-                    self.playback_started = True
+                with self.queue_lock:
+                    # Only start consuming when we have enough data
+                    if not self.playback_started and self.buffer.qsize() >= self.buffer_target:
+                        self.playback_started = True
+                    
+                    if self.playback_started:
+                        chunk = self.buffer.get_nowait()
+                    else:
+                        chunk = None
                 
-                if self.playback_started:
-                    chunk = self.buffer.get(timeout=0.1)
-                    self.stream.write(chunk['data'])
+                if chunk is not None:
+                    self.stream.write(chunk)
+                    
             except queue.Empty:
-                self.playback_started = False
-                pass
+                with self.queue_lock:
+                    self.playback_started = False
             except Exception as e:
+                print(f"Error in audio playback: {e}")
                 self.stop()
+                break
 
-    def play_chunk(self, data : np.ndarray, start_time : float, duration : float) -> EngineAudioStatus:
-        if(self.running == False):
-            return EngineAudioStatus(False, False, 0, 0, "Audio player is not running.")
-        start_sample = int(start_time * SAMPLE_RATE)
-        total_samples = data.shape[0]
-        requested_samples = int(duration * SAMPLE_RATE)
-        end_sample = start_sample + requested_samples
+    def is_playing(self) -> bool:
+        """Check if the audio player is currently playing audio."""
+        with self.queue_lock:
+            return self.playback_started
 
-        if start_sample >= total_samples:
-            # End of file reached
-            return EngineAudioStatus(True, False, 0, start_time)
+    def play_chunk(self, data : np.ndarray) -> bool:
+        '''Asynchronously play a chunk of audio data\n
+        Returns False if buffer is full or player is stopped. True if successful.'''
+        if data is None:
+            print("Cannot play None audio chunk")
+            return False
+            
+        with self.running_lock:
+            if not self.running:
+                print("Audio player is not running")
+                return False
 
-        chunk = data[start_sample:min(end_sample, total_samples)]
-
-        '''
-        # Resample for speed
-        if speed != 1.0:
-            #print("\tResampling chunk")
-            if chunk.ndim == 1:
-                chunk = resampy.resample(chunk, SAMPLE_RATE * speed, SAMPLE_RATE, parallel=True)
-            else:
-                chunk = resampy.resample(chunk.T, SAMPLE_RATE * speed, SAMPLE_RATE, parallel=True).T
-            #print("\tChunk resampled, applying fade")
-
-            # Apply very small fade in/out to reduce clicking
-            fade_samples = min(int(0.005 * SAMPLE_RATE), len(chunk) // 8)  # 5ms or 1/8 of chunk
-            if fade_samples > 0:
-                fade_in = np.linspace(0, 1, fade_samples)
-                fade_out = np.linspace(1, 0, fade_samples)
-                
-                if chunk.ndim == 1:  # Mono
-                    chunk[:fade_samples] *= fade_in
-                    chunk[-fade_samples:] *= fade_out
-                else:  # Stereo
-                    chunk[:fade_samples] *= fade_in.reshape(-1, 1)
-                    chunk[-fade_samples:] *= fade_out.reshape(-1, 1)
-                #print("\tFade applied")
-        '''
+        # Make sure data is contiguous when putting in buffer
+        chunk = data
+        
+        # sounddevice expects (samples, channels) format, but our audio is in (channels, samples)
+        if chunk.ndim == 2 and chunk.shape[0] < chunk.shape[1]:
+            # Transpose from (channels, samples) to (samples, channels)
+            chunk = chunk.T
 
         # Get the volume atomically, if not locked use previous value to prevent stutter
-        if(not self._lock.locked()):
-            with self._lock:
+        if(not self.vol_lock.locked()):
+            with self.vol_lock:
                 vol = self._volume
                 self._prev_volume = vol
         else:
@@ -213,21 +228,33 @@ class EngineAudioPlayer:
         if vol != 1.0:
             chunk = (chunk * np.float32(vol)).astype(np.float32, copy=False)
 
-        # Make sure data is contiguous when putting in buffer
-        chunk = np.ascontiguousarray(chunk)
+        chunk = np.ascontiguousarray(chunk, dtype=np.float32)
     
-        dropped = False
         try:
-            self.buffer.put_nowait(EngineChunk(chunk, duration))
+            with self.queue_lock:
+                self.buffer.put_nowait(chunk)
         except queue.Full:
-            dropped = True
+            print("Audio buffer full, dropping chunk")
+            return False
 
-        return EngineAudioStatus(False, dropped, duration, start_time + duration)
+        return True
 
     def stop(self):
         # Signal writer thread to stop and clean up audio stream safely
-        self.running = False
-        self.playback_started = False
+        print("Stopping audio player")
+        with self.running_lock:
+            if not self.running:
+                return
+            self.running = False
+        
+        with self.queue_lock:
+            self.playback_started = False
+            # Clear the buffer
+            try:
+                while True:
+                    self.buffer.get_nowait()
+            except queue.Empty:
+                pass
         # Avoid deadlocking by joining from a different thread
         try:
             if self.writer_thread and current_thread() is not self.writer_thread:

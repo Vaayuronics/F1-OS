@@ -1,10 +1,10 @@
 from devices.jerial import JSONSerialReader
-import engine.soundsys
+import engine.soundsys as sound
 import time
 import threading
 import sys
 import signal 
-from ui.dashboard import F1Dashboard, REFRESH_RATE
+import ui.dashboard as dash
 from devices.light_manager import LightManager
 
 '''
@@ -16,8 +16,8 @@ arduino = None
 lights = LightManager([17, 27, 22, 23, 24, 25, 5, 6, 16], ["Green 1", "Green 2", "Green 3", "Green 4", "Blue 1", "Blue 2", "Yellow", "Orange", "Red"])
 dashboard = None
 interrupt_lock = threading.Lock()
-ui_data_lock = threading.Lock()
-ui_data = None
+all_data_lock = threading.Lock()
+all_data = None
 interrupted = False
 
 def signal_handler(signum, frame):
@@ -43,36 +43,63 @@ def signal_handler(signum, frame):
 # Set up signal handler for graceful shutdown
 signal.signal(signal.SIGINT, signal_handler)
 
+def light_loop():
+    """Continuously update lights based on UI data"""
+    global interrupted, all_data
+    # First time light bootup animation
+    for i in range(len(lights)):
+        lights.turn_on(i)
+        time.sleep(0.3)
+    time.sleep(0.5)
+    for i in range(5):
+        lights.toggle_all()
+        time.sleep(0.2)
+    # Should be off now
+    while True:
+        with interrupt_lock:
+            if interrupted:
+                break
+            rpm = all_data.get('rpm', 0)
+            lights_count = len(lights.lights)
+            rpm_per_light = dash.MAX_RPM / lights_count
+            
+            for i in range(lights_count):
+                if rpm >= i * rpm_per_light:
+                    lights.turn_on(i)
+                if rpm > dash.MAX_RPM:
+                    lights.toggle(lights_count - 1)  # Flash the last light if over max RPM
+                else:
+                    lights.turn_off(i)
+        all_data_lock.release()
+        time.sleep(0.5)  # Adjust light update frequency as needed
+
 def telemetry_update_loop():
     """Continuously update telemetry data"""
     global interrupted
     while True:
-        interrupt_lock.acquire()
-        if interrupted:
-            interrupt_lock.release()
-            break
-        ui_data_lock.acquire()
-        if ui_data:
-            dashboard.set_data_thread_safe(ui_data)
-        ui_data_lock.release()
-        time.sleep(REFRESH_RATE)  # Update at ~58Hz to match display refresh rate
+        with interrupt_lock:
+            if interrupted:
+                break
+        data = None
+        with all_data_lock:
+            data = all_data
+        if data:
+            dashboard.set_data_thread_safe(data)
+        time.sleep(dash.REFRESH_RATE)  # Update at ~58Hz to match display refresh rate
 
 def hardware_loop():
     """Continuously poll hardware devices"""
-    global interrupted, ui_data
+    global interrupted, all_data, interrupt_lock, all_data_lock
     while True:
-        interrupt_lock.acquire()
-        if interrupted:
-            interrupt_lock.release()
-            break
+        with interrupt_lock:
+            if interrupted:
+                break
         pico_data = pico.poll()
         arduino_data = arduino.poll()
         ui_processed_data = process_data(pico_data, arduino_data)
         if ui_processed_data:
-            ui_data_lock.acquire()
-            ui_data = ui_processed_data
-            ui_data_lock.release()
-        interrupt_lock.release()
+            with all_data_lock:
+                all_data = ui_processed_data
         time.sleep(0.01)  # Polling interval
 
 def process_data(pico_data, arduino_data) -> dict:
@@ -80,17 +107,20 @@ def process_data(pico_data, arduino_data) -> dict:
     Operate on any hardware instructions.\n
     Return combined data for UI."""
     combined = {}
+    #TODO Assign the combined data to the correct fields for the UI.
     if pico_data:
         '''User button inputs'''
         if 'buttons' in pico_data:
             buttons = pico_data['buttons']
+            #FIX: Why are these knobs mapped from the buttons section?
             if 'engine_knob' in buttons:
-                combined['engine_volume'] = buttons['engine_knob'].get('count', 0)
-                combined['engine_mute'] = buttons['engine_knob'].get('switch', 0) == 0
+                combined['engine_mute'] = buttons['engine_knob'].get('switch', 0) == 1
+                combined['engine_volume'] = buttons['engine_knob'].get('count', 0) if combined.get('engine_mute', False) == False else 0
             if 'music_knob' in buttons:
-                combined['music_volume'] = buttons['music_knob'].get('count', 0)
-                combined['music_mute'] = buttons['music_knob'].get('switch', 0) == 0
+                combined['music_mute'] = buttons['music_knob'].get('switch', 0) == 1
+                combined['music_volume'] = buttons['music_knob'].get('count', 0) if combined.get('music_mute', False) == False else 0
         if 'knobs' in pico_data:
+            #FIX: These knob values should have proper names in the dict
             knobs = pico_data['knobs']
             for k in knobs:
                 combined[f"{k.get_name()}_count"] = k.get_count()
@@ -99,9 +129,35 @@ def process_data(pico_data, arduino_data) -> dict:
         '''Throttle and Speed data'''
         if 'throttle' in arduino_data:
             combined['throttle'] = arduino_data['throttle']
+        if 'brake' in arduino_data:
+            combined['brake'] = arduino_data['brake']
         if 'speed' in arduino_data:
             combined['speed'] = arduino_data['speed']
+    if 'throttle' in combined and 'speed' in combined:
+        combined['rpm'] = calculate_rpm(combined['throttle'], combined['speed'])
     return combined
+
+def audio_loop():
+    '''Play the sounds chunks and return '''
+    global interrupted, all_data, interrupt_lock, all_data_lock
+    while True:
+        with interrupt_lock:
+            if interrupted:
+                break
+        data = None
+        with all_data_lock:
+            data = all_data
+        if data and 'rpm' in data and 'throttle' in data:
+            rpm = data.get('rpm', 0)
+            throttle = data.get('throttle', 0)
+            speed = data.get('speed', 0)
+            #TODO use rpm, throttle, speed to determine audio chunk to play
+        time.sleep(0.5)  # Polling interval
+
+def calculate_rpm(throttle: float, speed: float) -> float:
+    '''Simple RPM calculation based on throttle and speed.'''
+    #TODO Implement RPM calculation based on karts state and relation to audio.
+    pass
 
 def boot():
     print("Booting up system.")
@@ -110,13 +166,19 @@ def boot():
 
     pico = JSONSerialReader("/dev/pico")
     arduino = JSONSerialReader("/dev/arduino")
-    dashboard = F1Dashboard("ui/dashboard_settings.ini", "ui/model.fbx")
+    dashboard = dash.F1Dashboard("ui/dashboard_settings.ini", "ui/model.fbx")
+
+    lighting_thread = threading.Thread(target=light_loop, daemon=True)
+    lighting_thread.start()
 
     telemetry_thread = threading.Thread(target=telemetry_update_loop, daemon=True)
     telemetry_thread.start()
 
     hardware_thread = threading.Thread(target=hardware_loop, daemon=True)
     hardware_thread.start()
+
+    audio_thread = threading.Thread(target=audio_loop, daemon=True)
+    audio_thread.start()
 
     dashboard.enable_fullscreen()
     exit_code = dashboard.run()
@@ -127,22 +189,4 @@ def boot():
     sys.exit(exit_code)
 
 if __name__ == "__main__":
-    #boot()
-    lights.turn_on("Green 1")
-    time.sleep(1)
-    lights.turn_on("Green 2")
-    time.sleep(1)
-    lights.turn_on("Green 3")
-    time.sleep(1)
-    lights.turn_on("Green 4")
-    time.sleep(1)
-    lights.turn_on("Blue 1")
-    time.sleep(1)
-    lights.turn_on("Blue 2")
-    time.sleep(1)
-    lights.turn_on("Yellow")
-    time.sleep(1)
-    lights.turn_on("Orange")
-    time.sleep(1)
-    lights.turn_on("Red")
-    time.sleep(10)
+    boot()

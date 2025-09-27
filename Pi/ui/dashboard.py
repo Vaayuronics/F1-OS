@@ -9,6 +9,7 @@ import os
 import sys
 
 REFRESH_RATE = 1/58
+MAX_RPM = 14000 # Max RPM for the gauge, actual should go to about 14.5k
 
 class F1Dashboard(QMainWindow):
     """Main dashboard window that displays gauges and car visualization."""
@@ -74,7 +75,7 @@ class F1Dashboard(QMainWindow):
         # This helps maintain independent resizing of each section
         
         # RPM gauge - reduced minimum width for small screens
-        self.rpm_gauge = GaugeWidget("RPM × 1000", 14000, "TH")
+        self.rpm_gauge = GaugeWidget("RPM × 1000", MAX_RPM, "TH")
         self.rpm_gauge.setMinimumWidth(80)  # Reduced from 150 to 80
         self.rpm_gauge.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         

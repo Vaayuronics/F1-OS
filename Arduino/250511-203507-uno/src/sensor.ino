@@ -1,4 +1,5 @@
 #include <ArduinoJson.h>
+#include <avr/wdt.h>  // Include watchdog timer library for reset functionality
 
 /*
   For best accuracy, potentiometer should measure > 0 when accelerator in idle state.
@@ -7,7 +8,7 @@
 
 //Pin values
 const uint8_t analogThrottle = A0;
-const uint8_t analogBreak = A1;
+const uint8_t analogBrake = A1;
 const int digitalSpeed = 2;  // Pin where Hall effect sensor is connected
 //Saved values
 unsigned long lastCalc = 0;
@@ -82,7 +83,7 @@ float readSpeed()
 void loop() 
 {
   float throttleAngle = readPedal(analogThrottle);
-  float breakAngle = readPedal(analogBreak);
+  float brakeAngle = readPedal(analogBrake);
   float speed = readSpeed();
 
   if (Serial.available() > 0) 
@@ -99,12 +100,19 @@ void loop()
 
       // Add data to the document
       data["throttle"] = throttleAngle;
-      data["break"] = breakAngle; // If break angle is max then set throttle to 0 in main code? Cant do burn out tho :(
+      data["brake"] = brakeAngle; // If brake angle is max then set throttle to 0 in main code? Cant do burn out tho :(
       data["speed"] = speed;
+      data["status"] = "polled";
 
       // Serialize the document to a string and send it over Serial
       serializeJson(data, Serial);
       Serial.println();
+    }
+    else if(message["command"] == "reset")
+    {
+      // Reset the arduino as if it were powercycled
+      wdt_enable(WDTO_15MS);  // Enable watchdog timer with 15ms timeout
+      while(1) {}             // Wait for watchdog to reset the system
     }
   }
 }

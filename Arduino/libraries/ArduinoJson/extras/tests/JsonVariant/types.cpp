@@ -44,7 +44,6 @@ TEST_CASE("JsonVariant set()/get()") {
 #endif
 
   // /!\ Most test were moved to `JsonVariant/set.cpp`
-  // TODO: move the remaining tests too
 
   SECTION("False") {
     variant.set(false);

@@ -1,5 +1,5 @@
 import sys
-from machine import Pin, reset, UART
+from machine import Pin, reset
 import include.gyro as gyro_module
 from include.button import Button
 from include.knob import Knob
@@ -14,7 +14,7 @@ LED.on()  # Turn on immediately to show we're starting
 
 # Defining objects
 gyro = gyro_module.Gyro(16, 17)
-buttons = [Button(26, "Blue")]
+buttons = [Button(26, "Start")]
 knobs = [Knob(19, 18, 20, "Engine")]  # dt, clk, sw
 poller = select.poll()
 last_led_toggle = 0
