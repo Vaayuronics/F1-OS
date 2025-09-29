@@ -1,0 +1,5 @@
+Arduino is now no longer going to communicate with the Motor Controller.
+That job is now handled entirely by the Raspberry Pi, using a DAC, ADC,
+and CAN Hat. This is much more reliable and easier to work with, as
+it does not rely on a multi chain system of controller to Arduino to
+Pi to Arduino to controller. The Arduino is now relegated to reading throttle and brake inputs, as well as controlling the DRS and the lights.

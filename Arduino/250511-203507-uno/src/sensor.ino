@@ -39,6 +39,13 @@ float readPedal(uint8_t analogPin)
   return angle;
 }
 
+void sendAnalog(uint8_t pin, float voltage)
+{
+  // Convert the voltage (0.0 - 5.0) to a value between 0 and 255
+  int analogValue = (int)(voltage * 255.0 / 5.0);
+  analogWrite(pin, analogValue); // Send the value to the specified pin
+}
+
 void setup() 
 {
   Serial.begin(115200);
@@ -46,6 +53,8 @@ void setup()
 }
 
 // Reads pulses from hall effect sensor and converts that to mph
+// Only needed if cannot decipher CANBUS from Motor controller
+// CANBUS should provide speed data directly
 float readSpeed()
 {
   unsigned long time = millis();
@@ -107,6 +116,14 @@ void loop()
       // Serialize the document to a string and send it over Serial
       serializeJson(data, Serial);
       Serial.println();
+    }
+    else if(message["command"] == "throttle")
+    {
+      // Set the maxThrottle value
+      if(message["value"] != NULL)
+      {
+        maxThrottle = message["value"];
+      }
     }
     else if(message["command"] == "reset")
     {

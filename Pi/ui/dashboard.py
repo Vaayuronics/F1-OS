@@ -231,6 +231,11 @@ class F1Dashboard(QMainWindow):
         self.animation_step = 0
         self.animation_phase = 0  # 0: ramp up, 1: oscillate
         self.animation_start_time = 0
+        
+        # Right bar mode tracking (engine tune vs regen braking)
+        self.right_bar_mode = "engine"  # "engine" or "regen"
+        self.engine_tune_value = 0.0
+        self.regen_brake_value = 0.0
     
     def run(self):
         """Show the dashboard and run the application."""
@@ -260,12 +265,23 @@ class F1Dashboard(QMainWindow):
                 data.pop('throttle')
             else:
                 data.pop('throttle')  # Remove but don't apply during animation
-        if 'tune' in data:
+        if 'engine_tune' in data:
             if not self.startup_animation_active:
-                self.setTune(data['tune'])
-                data.pop('tune')
+                self.setEnginetune(data['engine_tune'])
+                data.pop('engine_tune')
             else:
-                data.pop('tune')  # Remove but don't apply during animation
+                data.pop('engine_tune')
+        if 'regen_brake' in data:
+            if not self.startup_animation_active:
+                self.setRegenBrake(data['regen_brake'])
+                data.pop('regen_brake')
+            else:
+                data.pop('regen_brake')
+        if 'right_bar_switch' in data:
+            # Detect switch press (assuming it's a boolean or toggle signal)
+            if data['right_bar_switch']:
+                self.toggle_right_bar_mode()
+            data.pop('right_bar_switch')
         if 'wheel_rotation' in data:
             self.setWheelRotation(data['wheel_rotation'])
             data.pop('wheel_rotation')
@@ -425,12 +441,68 @@ class F1Dashboard(QMainWindow):
         return self.music_volume_gauge.getVolumeLevel()
     
     def setTune(self, tune):
-        """Set the throttle value (0-1 range)."""
-        self.mph_gauge.setThrottle(tune)
+        """Internal method: Set the tune value based on current mode (0-1 range). Use setEnginetune() or setRegenBrake() directly instead."""
+        if self.right_bar_mode == "engine":
+            self.setEnginetune(tune)
+        else:
+            self.setRegenBrake(tune)
     
     def getTune(self):
-        """Get current throttle value."""
+        """Get current tune value based on active mode (engine or regen)."""
         return self.mph_gauge.getThrottle()
+    
+    def toggle_right_bar_mode(self):
+        """Toggle between engine tune and regen braking mode."""
+        if self.right_bar_mode == "engine":
+            self.right_bar_mode = "regen"
+            self.update_right_bar_display()
+        else:
+            self.right_bar_mode = "engine"
+            self.update_right_bar_display()
+        print(f"Right bar mode switched to: {self.right_bar_mode}")
+    
+    def update_right_bar_display(self):
+        """Update the right bar label and value based on current mode."""
+        if self.right_bar_mode == "engine":
+            # Set label to engine tune
+            if hasattr(self.mph_gauge, 'setLabel'):
+                self.mph_gauge.setLabel("ENG_TUN")
+            # Set current value to engine tune value
+            if not self.startup_animation_active:
+                self.mph_gauge.setThrottle(self.engine_tune_value)
+        else:  # regen mode
+            # Set label to regen
+            if hasattr(self.mph_gauge, 'setLabel'):
+                self.mph_gauge.setLabel("REGN")
+            # Set current value to regen brake value
+            if not self.startup_animation_active:
+                self.mph_gauge.setThrottle(self.regen_brake_value)
+    
+    def setEnginetune(self, tune_value):
+        """Set the engine tune value (0-1 range)."""
+        self.engine_tune_value = tune_value
+        # Only update display if we're in engine mode
+        if self.right_bar_mode == "engine" and not self.startup_animation_active:
+            self.mph_gauge.setThrottle(tune_value)
+    
+    def getEnginetune(self):
+        """Get current engine tune value."""
+        return self.engine_tune_value
+    
+    def setRegenBrake(self, regen_value):
+        """Set the regen braking value (0-1 range)."""
+        self.regen_brake_value = regen_value
+        # Only update display if we're in regen mode
+        if self.right_bar_mode == "regen" and not self.startup_animation_active:
+            self.mph_gauge.setThrottle(regen_value)
+    
+    def getRegenBrake(self):
+        """Get current regen braking value."""
+        return self.regen_brake_value
+    
+    def getRightBarMode(self):
+        """Get the current right bar mode ('engine' or 'regen')."""
+        return self.right_bar_mode
     
     def setWheelRotation(self, angle_degrees):
         """Set the wheel rotation angle in degrees."""

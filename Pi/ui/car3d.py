@@ -157,7 +157,7 @@ class Car3DWidget(QWidget):
         # Initialize wheel tracking
         self.wheel_entities = []
         self.wheel_transforms = []
-        self.current_wheel_rotation = 0.0
+        self.current_wheel_angle = 0.0
     
     def setupLights(self):
         """Set up comprehensive lighting for the scene."""
@@ -223,11 +223,11 @@ class Car3DWidget(QWidget):
     
     def setWheelAngle(self, angle):
         """Set the wheel rotation angle in degrees."""
-        self.rotate_wheels(angle)
+        self.turn_wheels(angle)
     
     def getWheelAngle(self):
         """Get the current wheel rotation angle."""
-        return self.current_wheel_rotation
+        return self.current_wheel_angle
     
     def get_camera_settings(self):
         """Get current camera position, view center, and up vector."""
@@ -317,9 +317,24 @@ class Car3DWidget(QWidget):
         except Exception as e:
             print(f"Error searching for wheels: {e}")
     
-    def rotate_wheels(self, angle_degrees):
+    def rotate_wheels(self, rotation_degrees):
+        """Rotate wheels around their rotation axis by the specified degrees."""
+        if not self.wheel_transforms:
+            # Try to find wheels if we haven't already
+            self.find_wheel_entities()
+        
+        for transform in self.wheel_transforms:
+            try:
+                # Create rotation around the wheel's local axis (usually Y or Z)
+                # Most wheels rotate around Y-axis, but we can try both
+                rotation = QQuaternion.fromAxisAndAngle(QVector3D(0, 1, 0), rotation_degrees)
+                transform.setRotation(rotation)
+            except Exception as e:
+                print(f"Error rotating wheel: {e}")
+
+    def turn_wheels(self, angle_degrees):
         """Rotate all found wheel entities by the specified angle in degrees."""
-        self.current_wheel_rotation = angle_degrees
+        self.current_wheel_angle = angle_degrees
         
         if not self.wheel_transforms:
             # Try to find wheels if we haven't already

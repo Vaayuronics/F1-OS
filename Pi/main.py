@@ -17,6 +17,10 @@ lights = LightManager([17, 27, 22, 23, 24, 25, 5, 6, 16], ["Green 1", "Green 2",
 dashboard = None
 interrupt_lock = threading.Lock()
 all_data_lock = threading.Lock()
+interrupt_cond = threading.Condition()
+all_data_cond = threading.Condition()
+#TODO IMPLEMENT CONDS FOR THREAD SYNC
+started = False
 all_data = None
 interrupted = False
 
@@ -26,6 +30,7 @@ def signal_handler(signum, frame):
     print("\nReceived interrupt signal. Shutting down gracefully...")
     with interrupt_lock:
         interrupted = True
+        interrupt_cond.notify_all()
     if dashboard:
         dashboard.close()  # Close the dashboard window
     if lights:
@@ -106,25 +111,45 @@ def process_data(pico_data, arduino_data) -> dict:
     """Combine and process data from pico and arduino.\n
     Operate on any hardware instructions.\n
     Return combined data for UI."""
+    global started
     combined = {}
     #TODO Assign the combined data to the correct fields for the UI.
+    #TODO Think about having 2 shared data dicts, one for UI and one for hardware control.
     if pico_data:
         '''User button inputs'''
         if 'buttons' in pico_data:
             buttons = pico_data['buttons']
-            #FIX: Why are these knobs mapped from the buttons section?
-            if 'engine_knob' in buttons:
-                combined['engine_mute'] = buttons['engine_knob'].get('switch', 0) == 1
-                combined['engine_volume'] = buttons['engine_knob'].get('count', 0) if combined.get('engine_mute', False) == False else 0
-            if 'music_knob' in buttons:
-                combined['music_mute'] = buttons['music_knob'].get('switch', 0) == 1
-                combined['music_volume'] = buttons['music_knob'].get('count', 0) if combined.get('music_mute', False) == False else 0
+            if 'Headlights' in buttons:
+                #TODO: Implement Headlights
+                pass
+            if 'Hazards' in buttons:
+                #TODO: Implement Hazards
+                pass
+            if 'Horn' in buttons:
+                #TODO: Implement Horn
+                pass
+            if 'Auto Turn Signal Toggle' in buttons:
+                #TODO: Implement Auto Turn Signal Toggle
+                pass
+            if 'Start' in buttons and buttons['Start'].get('pressed', False) and not started:
+                #TODO: Implement Start
+                started = True
+            if 'Stop' in buttons and buttons['Stop'].get('pressed', False) and started:
+                #TODO: Implement Stop
+                started = False
+            if 'Play/Pause' in buttons and buttons['Play/Pause'].get('pressed', False):
+                #TODO: Implement Play/Pause
+                pass
         if 'knobs' in pico_data:
-            #FIX: These knob values should have proper names in the dict
             knobs = pico_data['knobs']
-            for k in knobs:
-                combined[f"{k.get_name()}_count"] = k.get_count()
-                combined[f"{k.get_name()}_switch"] = k.get_switch()
+            if 'Engine Vol' in knobs:
+                combined['Engine Volume'] = max(min(knobs['Engine Vol'].get('count', 0) if not knobs['Engine Vol'].get('switch', 0) else 0, 100), 0)  # Mute if switch is on, clamped 0-100
+            if 'Music Vol' in knobs:
+                combined['Music Volume'] = max(min(knobs['Music Vol'].get('count', 0) if not knobs['Music Vol'].get('switch', 0) else 0, 100), 0)  # Mute if switch is on, clamped 0-100
+            if 'Engine Tune' in knobs:
+                combined['Engine Tune'] = max(min(knobs['Engine Tune'].get('count', 0), 100), 0) # Clamped 0-100
+                combined['Engine Mode'] = knobs['Engine Tune'].get('switch', 0)  # 0 or 1 for two modes
+
     if arduino_data:
         '''Throttle and Speed data'''
         if 'throttle' in arduino_data:
