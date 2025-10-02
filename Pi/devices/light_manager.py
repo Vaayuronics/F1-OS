@@ -33,7 +33,7 @@ class LightManager:
             light.toggle()
 
     def toggle(self, name: str = None, index: int = None):
-        if type(name) != str:
+        if index is None and isinstance(name, int):
             index = name
             name = None
         if name:
@@ -47,6 +47,9 @@ class LightManager:
                 return
 
     def turn_on(self, name: str = None, index: int = None):
+        if index is None and isinstance(name, int):
+            index = name
+            name = None
         if name:
             for light in self.lights:
                 if light.get_name() == name:

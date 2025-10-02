@@ -15,12 +15,6 @@ pico = None
 arduino = None
 lights = LightManager([17, 27, 22, 23, 24, 25, 5, 6, 16], ["Green 1", "Green 2", "Green 3", "Green 4", "Blue 1", "Blue 2", "Yellow", "Orange", "Red"])
 dashboard = None
-#TODO: MEGA ISSUE NEED TOO REMOVE LOCKS AS COND HAVE THIER OWN
-interrupt_lock = threading.Lock()
-ui_data_lock = threading.Lock()
-hardware_data_lock = threading.Lock()
-sound_data_lock = threading.Lock()
-interrupt_cond = threading.Condition()
 ui_data_cond = threading.Condition()
 hardware_data_cond = threading.Condition()
 sound_data_cond = threading.Condition()
@@ -28,15 +22,13 @@ started = False
 ui_data = None
 sound_data = None
 hardware_data = None
-interrupted = False
+interrupted = threading.Event()
 
 def signal_handler(signum, frame):
     """Handle SIGINT (Ctrl+C) gracefully"""
-    global interrupted, dashboard, lights
+    global interrupted, dashboard, lights, arduino, pico
     print("\nReceived interrupt signal. Shutting down gracefully...")
-    with interrupt_lock:
-        interrupted = True
-        interrupt_cond.notify_all()
+    interrupted.set()
     if dashboard:
         dashboard.close()  # Close the dashboard window
     if lights:
@@ -56,7 +48,7 @@ signal.signal(signal.SIGINT, signal_handler)
 
 def light_loop():
     """Continuously update lights based on UI data"""
-    global interrupted, all_data
+    global interrupted, interrupt_cond, ui_data, ui_data_cond
     # First time light bootup animation
     for i in range(len(lights)):
         lights.turn_on(i)
@@ -67,121 +59,116 @@ def light_loop():
         time.sleep(0.2)
     # Should be off now
     while True:
-        with interrupt_lock:
+        with interrupt_cond:
             if interrupted:
                 break
-            rpm = all_data.get('rpm', 0)
-            lights_count = len(lights.lights)
-            rpm_per_light = dash.MAX_RPM / lights_count
-            
-            for i in range(lights_count):
-                if rpm >= i * rpm_per_light:
-                    lights.turn_on(i)
-                if rpm > dash.MAX_RPM:
-                    lights.toggle(lights_count - 1)  # Flash the last light if over max RPM
-                else:
-                    lights.turn_off(i)
-        all_data_lock.release()
+        data : dict = None
+        with ui_data_cond:
+            data = ui_data
+        rpm = data.get('rpm', 0)
+        lights_count = len(lights.lights)
+        rpm_per_light = dash.MAX_RPM / lights_count
+        
+        for i in range(lights_count):
+            if rpm >= i * rpm_per_light:
+                lights.turn_on(i)
+            if rpm > dash.MAX_RPM:
+                lights.toggle(lights_count - 1)  # Flash the last light if over max RPM
+            else:
+                lights.turn_off(i)
         time.sleep(0.5)  # Adjust light update frequency as needed
 
 def telemetry_update_loop():
     """Continuously update telemetry data"""
     global interrupted
     while True:
-        with interrupt_lock:
+        with interrupt_cond:
             if interrupted:
                 break
         data = None
-        with all_data_lock:
-            data = all_data
+        with ui_data_cond:
+            data = ui_data
         if data:
             dashboard.set_data_thread_safe(data)
         time.sleep(dash.REFRESH_RATE)  # Update at ~58Hz to match display refresh rate
 
 def hardware_loop():
     """Continuously poll hardware devices"""
-    global interrupted, all_data, interrupt_lock, all_data_lock
-    while True:
-        with interrupt_lock:
-            if interrupted:
-                break
+    global interrupted, ui_data, interrupt_cond, hardware_data, hardware_data_cond, sound_data, sound_data_cond, ui_data_cond
+    while not interrupted.is_set():
         pico_data = pico.poll()
         arduino_data = arduino.poll()
-        process_data(pico_data, arduino_data)
+        #TODO: Process hardware data and update ui_data and sound_data accordingly
+        process_ui_data(pico_data, arduino_data)
         time.sleep(0.01)  # Polling interval
 
-def process_data(pico_data, arduino_data):
+def process_ui_data(pico_data, arduino_data):
     """Combine and process data from pico and arduino.\n
     Operate on any hardware instructions.\n
     Return combined data for UI."""
-    global started
-    combined = {}
-    #TODO: Split data into multiple dicts for different threads
-    if pico_data:
-        '''User button inputs'''
-        if 'buttons' in pico_data:
-            buttons = pico_data['buttons']
-            if 'Headlights' in buttons:
-                #TODO: Implement Headlights
-                pass
-            if 'Hazards' in buttons:
-                #TODO: Implement Hazards
-                pass
-            if 'Horn' in buttons:
-                #TODO: Implement Horn
-                pass
-            if 'Auto Turn Signal Toggle' in buttons:
-                #TODO: Implement Auto Turn Signal Toggle
-                pass
-            if 'Start' in buttons and buttons['Start'].get('pressed', False) and not started:
-                #TODO: Implement Start
-                started = True
-            if 'Stop' in buttons and buttons['Stop'].get('pressed', False) and started:
-                #TODO: Implement Stop
-                started = False
-            if 'Play/Pause' in buttons and buttons['Play/Pause'].get('pressed', False):
-                #TODO: Implement Play/Pause
-                pass
-        if 'knobs' in pico_data:
-            knobs = pico_data['knobs']
-            if 'Engine Vol' in knobs:
-                combined['Engine Volume'] = max(min(knobs['Engine Vol'].get('count', 0) if not knobs['Engine Vol'].get('switch', 0) else 0, 100), 0)  # Mute if switch is on, clamped 0-100
-            if 'Music Vol' in knobs:
-                combined['Music Volume'] = max(min(knobs['Music Vol'].get('count', 0) if not knobs['Music Vol'].get('switch', 0) else 0, 100), 0)  # Mute if switch is on, clamped 0-100
-            if 'Engine Tune' in knobs:
-                combined['Engine Tune'] = max(min(knobs['Engine Tune'].get('count', 0), 100), 0) # Clamped 0-100
-                combined['Engine Mode'] = knobs['Engine Tune'].get('switch', 0)  # 0 or 1 for two modes
+    global ui_data, ui_data_cond
+    with ui_data_cond:
+        if pico_data:
+            '''User button inputs'''
+            if 'buttons' in pico_data:
+                buttons = pico_data['buttons']
+                if 'Headlights' in buttons:
+                    #TODO: Implement Headlights
+                    pass
+                if 'Hazards' in buttons:
+                    #TODO: Implement Hazards
+                    pass
+                if 'Horn' in buttons:
+                    #TODO: Implement Horn
+                    pass
+                if 'Auto Turn Signal Toggle' in buttons:
+                    #TODO: Implement Auto Turn Signal Toggle
+                    pass
+                if 'Start' in buttons and buttons['Start'].get('pressed', False) and not started:
+                    #TODO: Implement Start
+                    pass
+                if 'Stop' in buttons and buttons['Stop'].get('pressed', False) and started:
+                    #TODO: Implement Stop
+                    pass
+                if 'Play/Pause' in buttons and buttons['Play/Pause'].get('pressed', False):
+                    #TODO: Implement Play/Pause
+                    pass
+            if 'knobs' in pico_data:
+                knobs = pico_data['knobs']
+                if 'Engine Vol' in knobs:
+                    ui_data['Engine Volume'] = max(min(knobs['Engine Vol'].get('count', 0) if not knobs['Engine Vol'].get('switch', 0) else 0, 100), 0)  # Mute if switch is on, clamped 0-100
+                if 'Music Vol' in knobs:
+                    ui_data['Music Volume'] = max(min(knobs['Music Vol'].get('count', 0) if not knobs['Music Vol'].get('switch', 0) else 0, 100), 0)  # Mute if switch is on, clamped 0-100
+                if 'Engine Tune' in knobs:
+                    ui_data['Engine Tune'] = max(min(knobs['Engine Tune'].get('count', 0), 100), 0) # Clamped 0-100
+                    ui_data['Engine Mode'] = knobs['Engine Tune'].get('switch', 0)  # 0 or 1 for two modes
 
-    if arduino_data:
-        '''Throttle and Speed data'''
-        if 'throttle' in arduino_data:
-            combined['throttle'] = arduino_data['throttle']
-        if 'brake' in arduino_data:
-            combined['brake'] = arduino_data['brake']
-        if 'speed' in arduino_data:
-            combined['speed'] = arduino_data['speed']
-    if 'throttle' in combined and 'speed' in combined:
-        combined['rpm'] = calculate_rpm(combined['throttle'], combined['speed'])
-    return combined
+        if arduino_data:
+            '''Throttle and Speed data'''
+            if 'throttle' in arduino_data:
+                ui_data['throttle'] = arduino_data['throttle']
+            if 'brake' in arduino_data:
+                ui_data['brake'] = arduino_data['brake']
+            if 'speed' in arduino_data:
+                ui_data['speed'] = arduino_data['speed']
+        if 'throttle' in ui_data and 'speed' in ui_data:
+            ui_data['rpm'] = calculate_rpm(ui_data['throttle'], ui_data['speed'])
+
 
 def audio_loop():
     '''Play the sounds chunks and return '''
-    global interrupted, all_data, interrupt_lock, all_data_lock
-    while True:
-        with interrupt_lock:
-            if interrupted:
-                break
+    global interrupted, sound_data, sound_data_cond
+    while not interrupted.is_set():
         data = None
-        with all_data_lock:
-            data = all_data
-        if data and 'rpm' in data and 'throttle' in data:
-            rpm = data.get('rpm', 0)
-            throttle = data.get('throttle', 0)
-            speed = data.get('speed', 0)
-            #TODO use rpm, throttle, speed to determine audio chunk to play
+        with sound_data_cond:
+            while not sound_data:
+                sound_data_cond.wait()
+            data = sound_data
+            sound_data = None  # Clear after reading
+        #TODO use rpm, throttle, speed, engine rpm to determine audio chunk to play
         time.sleep(0.5)  # Polling interval
 
-def calculate_rpm(throttle: float, speed: float) -> float:
+def calculate_rpm(throttle: float, speed: float, gear: int, engine_rpm: int) -> float:
     '''Simple RPM calculation based on throttle and speed.'''
     #TODO Implement RPM calculation based on karts state and relation to audio.
     pass
