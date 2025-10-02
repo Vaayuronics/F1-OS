@@ -16,12 +16,17 @@ arduino = None
 lights = LightManager([17, 27, 22, 23, 24, 25, 5, 6, 16], ["Green 1", "Green 2", "Green 3", "Green 4", "Blue 1", "Blue 2", "Yellow", "Orange", "Red"])
 dashboard = None
 interrupt_lock = threading.Lock()
-all_data_lock = threading.Lock()
+ui_data_lock = threading.Lock()
+hardware_data_lock = threading.Lock()
+sound_data_lock = threading.Lock()
 interrupt_cond = threading.Condition()
-all_data_cond = threading.Condition()
-#TODO IMPLEMENT CONDS FOR THREAD SYNC
+ui_data_cond = threading.Condition()
+hardware_data_cond = threading.Condition()
+sound_data_cond = threading.Condition()
 started = False
-all_data = None
+ui_data = None
+sound_data = None
+hardware_data = None
 interrupted = False
 
 def signal_handler(signum, frame):
@@ -101,20 +106,16 @@ def hardware_loop():
                 break
         pico_data = pico.poll()
         arduino_data = arduino.poll()
-        ui_processed_data = process_data(pico_data, arduino_data)
-        if ui_processed_data:
-            with all_data_lock:
-                all_data = ui_processed_data
+        process_data(pico_data, arduino_data)
         time.sleep(0.01)  # Polling interval
 
-def process_data(pico_data, arduino_data) -> dict:
+def process_data(pico_data, arduino_data):
     """Combine and process data from pico and arduino.\n
     Operate on any hardware instructions.\n
     Return combined data for UI."""
     global started
     combined = {}
-    #TODO Assign the combined data to the correct fields for the UI.
-    #TODO Think about having 2 shared data dicts, one for UI and one for hardware control.
+    #TODO: Split data into multiple dicts for different threads
     if pico_data:
         '''User button inputs'''
         if 'buttons' in pico_data:
@@ -214,4 +215,5 @@ def boot():
     sys.exit(exit_code)
 
 if __name__ == "__main__":
-    boot()
+    #boot()
+    lights.turn_on(0)
