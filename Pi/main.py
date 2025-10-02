@@ -15,6 +15,7 @@ pico = None
 arduino = None
 lights = LightManager([17, 27, 22, 23, 24, 25, 5, 6, 16], ["Green 1", "Green 2", "Green 3", "Green 4", "Blue 1", "Blue 2", "Yellow", "Orange", "Red"])
 dashboard = None
+#TODO: MEGA ISSUE NEED TOO REMOVE LOCKS AS COND HAVE THIER OWN
 interrupt_lock = threading.Lock()
 ui_data_lock = threading.Lock()
 hardware_data_lock = threading.Lock()
@@ -217,3 +218,5 @@ def boot():
 if __name__ == "__main__":
     #boot()
     lights.turn_on(0)
+    time.sleep(10)
+    lights.cleanup()
