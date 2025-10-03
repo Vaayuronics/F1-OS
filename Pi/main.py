@@ -30,7 +30,7 @@ def signal_handler(signum, frame):
     print("\nReceived interrupt signal. Shutting down gracefully...")
     interrupted.set()
     if dashboard:
-        dashboard.close()  # Close the dashboard window
+        dashboard.close_safely()  # Close the dashboard window safely from this thread
     if lights:
         lights.turn_off_all()  # Turn off all lights
         lights.cleanup()  # Clean up GPIO
