@@ -602,8 +602,8 @@ class F1Dashboard(QMainWindow):
     def setEnginetune(self, tune_value):
         """Set the engine tune value (0-1 range)."""
         self.engine_tune_value = tune_value
-        # Only update display if we're in engine mode
-        if self.right_bar_mode == "engine" and not self.startup_animation_active:
+        # Update display if we're in engine mode (allow during startup animation)
+        if self.right_bar_mode == "engine":
             self.mph_gauge.setThrottle(tune_value)
     
     def getEnginetune(self):
@@ -613,8 +613,8 @@ class F1Dashboard(QMainWindow):
     def setRegenBrake(self, regen_value):
         """Set the regen braking value (0-1 range)."""
         self.regen_brake_value = regen_value
-        # Only update display if we're in regen mode
-        if self.right_bar_mode == "regen" and not self.startup_animation_active:
+        # Update display if we're in regen mode (allow during startup animation)
+        if self.right_bar_mode == "regen":
             self.mph_gauge.setThrottle(regen_value)
     
     def getRegenBrake(self):
@@ -931,8 +931,6 @@ class F1Dashboard(QMainWindow):
                 progress = elapsed / 2.0  # 0.0 to 1.0
                 throttle_value = progress  # 0.0 to 1.0
                 tune_value = progress     # 0.0 to 1.0
-                rpm_value = progress * MAX_RPM  # 0.0 to MAX_RPM
-                speed_value = progress * 60     # 0.0 to 60 mph
                 
                 # Apply smooth easing (ease-out)
                 throttle_value = 1 - (1 - throttle_value) ** 3
@@ -942,7 +940,11 @@ class F1Dashboard(QMainWindow):
                 
                 # Update all the gauges
                 self.setThrottle(throttle_value)
-                self.setTune(tune_value)
+                # Only animate the currently active right bar mode
+                if self.right_bar_mode == "engine":
+                    self.setEnginetune(tune_value)
+                else:
+                    self.setRegenBrake(tune_value)
                 self.setRPM(rpm_eased * MAX_RPM)
                 self.setSpeed(speed_eased * 60)
             else:
@@ -987,7 +989,8 @@ class F1Dashboard(QMainWindow):
         
         # Reset all gauges to default values
         self.setThrottle(0.0)
-        self.setTune(0.0)
+        self.setEnginetune(0.0)
+        self.setRegenBrake(0.0)
         self.setRPM(0.0)
         self.setSpeed(0.0)
         
