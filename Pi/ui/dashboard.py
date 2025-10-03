@@ -354,24 +354,22 @@ class F1Dashboard(QMainWindow):
         
         # Create popup notification widget
         self.popup_notification = PopupNotification(self)
-        
-        # Show model fallback notification if needed (deferred from model verification)
-        if hasattr(self, 'show_model_fallback_notification') and self.show_model_fallback_notification:
-            # Use a timer to show notification after UI is fully rendered
-            QTimer.singleShot(500, lambda: self.show_notification(
-                "MODEL NOT FOUND",
-                "Using fallback model",
-                3000,  # 3 second duration
-                "#4A2E1E",  # Orange/brown background for warning
-                "white",
-                "#FFD700"   # Gold subtitle color
-            ))
     
     def run(self):
         """Show the dashboard and run the application."""
         self.show()
         # Start the startup animation after showing
         self.start_startup_animation()
+        # Show model fallback notification if needed
+        if self.show_model_fallback_notification:
+            self.show_notification(
+                "MODEL NOT FOUND",
+                "Using fallback model",
+                3000,  # 3 second duration
+                "#4A2E1E",  # Orange/brown background for warning
+                "white",
+                "#FFD700"   # Gold subtitle color
+            )
         return self.app.exec()
     
     def set_data_thread_safe(self, data_dict):
