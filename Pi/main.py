@@ -50,13 +50,7 @@ def light_loop():
     """Continuously update lights based on UI data"""
     global interrupted, interrupt_cond, ui_data, ui_data_cond
     # First time light bootup animation
-    for i in range(len(lights)):
-        lights.turn_on(i)
-        time.sleep(0.3)
-    time.sleep(0.5)
-    for i in range(5):
-        lights.toggle_all()
-        time.sleep(0.2)
+    lights_boot_anim()
     # Should be off now
     while True:
         with interrupt_cond:
@@ -186,6 +180,15 @@ def start_dashboard():
     print("Application finished with exit code:", exit_code)
     sys.exit(exit_code)
 
+def lights_boot_anim():
+    for i in range(len(lights)):
+        lights.turn_on(i)
+        time.sleep(0.5)
+    for i in range(5):
+        lights.toggle_all()
+        time.sleep(0.3)
+    lights.turn_off_all()
+
 def boot():
     print("Booting up system.")
 
@@ -210,16 +213,5 @@ def boot():
 
 if __name__ == "__main__":
     #boot()
-    threading.Thread(target=start_dashboard, daemon=True).start()
-    time.sleep(1)
-    print("starting")
-    for i in range(len(lights)):
-        lights.turn_on(i)
-        time.sleep(0.5)
-        print(f"turning on {i}")
-    for i in range(5):
-        lights.toggle_all()
-        time.sleep(0.3)
-        print(f"toggle {i}")
-    lights.turn_off_all()
-    print("finish")
+    threading.Thread(target=lights_boot_anim, daemon=True).start()
+    start_dashboard()
