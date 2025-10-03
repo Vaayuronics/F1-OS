@@ -931,14 +931,20 @@ class F1Dashboard(QMainWindow):
                 progress = elapsed / 2.0  # 0.0 to 1.0
                 throttle_value = progress  # 0.0 to 1.0
                 tune_value = progress     # 0.0 to 1.0
+                rpm_value = progress * MAX_RPM  # 0.0 to MAX_RPM
+                speed_value = progress * 60     # 0.0 to 60 mph
                 
                 # Apply smooth easing (ease-out)
                 throttle_value = 1 - (1 - throttle_value) ** 3
                 tune_value = 1 - (1 - tune_value) ** 3
+                rpm_eased = 1 - (1 - progress) ** 3
+                speed_eased = 1 - (1 - progress) ** 3
                 
-                # Update the gauges
+                # Update all the gauges
                 self.setThrottle(throttle_value)
                 self.setTune(tune_value)
+                self.setRPM(rpm_eased * MAX_RPM)
+                self.setSpeed(speed_eased * 60)
             else:
                 # Move to phase 2
                 self.animation_phase = 1
@@ -958,9 +964,18 @@ class F1Dashboard(QMainWindow):
                 throttle_value = base_value + (sine_wave * amplitude)
                 tune_value = base_value + (sine_wave * amplitude * 0.8)  # Slightly different for variety
                 
-                # Update the gauges
+                # RPM and Speed oscillation (slightly different frequencies for variety)
+                rpm_sine = math.sin(elapsed * 1.8 * 2 * math.pi)  # Slightly different frequency
+                speed_sine = math.sin(elapsed * 2.2 * 2 * math.pi)  # Different frequency
+                
+                rpm_oscillation = base_value + (rpm_sine * amplitude * 0.9)
+                speed_oscillation = base_value + (speed_sine * amplitude * 0.7)
+                
+                # Update all gauges
                 self.setThrottle(throttle_value)
                 self.setTune(tune_value)
+                self.setRPM(rpm_oscillation * MAX_RPM)
+                self.setSpeed(speed_oscillation * 60)
             else:
                 # Animation complete
                 self.end_startup_animation()
@@ -970,9 +985,11 @@ class F1Dashboard(QMainWindow):
         self.startup_timer.stop()
         self.startup_animation_active = False
         
-        # Reset to default values
+        # Reset all gauges to default values
         self.setThrottle(0.0)
         self.setTune(0.0)
+        self.setRPM(0.0)
+        self.setSpeed(0.0)
         
         print("Startup animation complete!")
     
