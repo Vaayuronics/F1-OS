@@ -19,11 +19,11 @@ class PopupNotification(QWidget):
         super().__init__(parent)
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setFixedSize(200, 200)  # Square popup
+        self.setFixedSize(400, 400)  # Square popup - doubled in size
         
         # Create main layout
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setContentsMargins(5, 5, 5, 5)  # Reduced padding
         layout.setSpacing(10)
         layout.setAlignment(Qt.AlignCenter)
         
@@ -39,7 +39,7 @@ class PopupNotification(QWidget):
         
         # Container layout
         container_layout = QVBoxLayout(self.container)
-        container_layout.setContentsMargins(20, 20, 20, 20)
+        container_layout.setContentsMargins(8, 8, 8, 8)  # Reduced padding
         container_layout.setSpacing(10)
         container_layout.setAlignment(Qt.AlignCenter)
         
