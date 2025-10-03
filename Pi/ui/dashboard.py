@@ -358,7 +358,6 @@ class F1Dashboard(QMainWindow):
         # Show model fallback notification if needed (deferred from model verification)
         if hasattr(self, 'show_model_fallback_notification') and self.show_model_fallback_notification:
             # Use a timer to show notification after UI is fully rendered
-            from PySide6.QtCore import QTimer
             QTimer.singleShot(500, lambda: self.show_notification(
                 "MODEL NOT FOUND",
                 "Using fallback model",
