@@ -17,7 +17,7 @@ class PopupNotification(QWidget):
     
     def __init__(self, parent=None):
         super().__init__(parent)
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setFixedSize(200, 200)  # Square popup
         
@@ -119,6 +119,7 @@ class PopupNotification(QWidget):
         # Show popup and start timer
         self.show()
         self.raise_()  # Bring to front
+        self.activateWindow()  # Ensure it gets focus and stays on top
         self.hide_timer.start(duration_ms)
     
     def hide_popup(self):
