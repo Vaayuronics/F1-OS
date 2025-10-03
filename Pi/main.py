@@ -25,7 +25,7 @@ hardware_data = None
 interrupted = threading.Event()
 
 def signal_handler(signum, frame):
-    """Handle SIGINT (Ctrl+C) gracefully"""
+    """Handle SIGINT gracefully"""
     global interrupted, dashboard, lights, arduino, pico
     print("\nReceived interrupt signal. Shutting down gracefully...")
     interrupted.set()
@@ -210,7 +210,7 @@ def boot():
 
 if __name__ == "__main__":
     #boot()
-    start_dashboard()
+    threading.Thread(target=start_dashboard, daemon=True).start()
     time.sleep(1)
     print("starting")
     for i in range(len(lights)):
