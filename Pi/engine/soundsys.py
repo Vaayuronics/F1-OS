@@ -33,3 +33,4 @@ def test_latency():
     player.stop()
 
 #TODO Implement sound system using EngineAudioPlayer
+def engine_audio():

@@ -13,7 +13,7 @@ TODO: Check to see if the usb ports on the Raspberry Pi are still not working wi
 
 pico = None
 arduino = None
-lights = LightManager([17, 27, 22, 23, 24, 25, 5, 6, 16], ["Green 1", "Green 2", "Green 3", "Green 4", "Blue 1", "Blue 2", "Yellow", "Orange", "Red"])
+lights = LightManager([17, 27, 22, 23, 24, 25, 5, 6, 16].reverse(), ["Green 1", "Green 2", "Green 3", "Green 4", "Blue 1", "Blue 2", "Yellow", "Orange", "Red"])
 dashboard = None
 ui_data_cond = threading.Condition()
 hardware_data_cond = threading.Condition()
@@ -152,7 +152,7 @@ def process_ui_data(pico_data, arduino_data):
             if 'speed' in arduino_data:
                 ui_data['speed'] = arduino_data['speed']
         if 'throttle' in ui_data and 'speed' in ui_data:
-            ui_data['rpm'] = calculate_rpm(ui_data['throttle'], ui_data['speed'])
+            ui_data['rpm'] = calc_rpm(ui_data['throttle'], ui_data['speed'])
 
 
 def audio_loop():
@@ -168,7 +168,7 @@ def audio_loop():
         #TODO use rpm, throttle, speed, engine rpm to determine audio chunk to play
         time.sleep(0.5)  # Polling interval
 
-def calculate_rpm(throttle: float, speed: float, gear: int, engine_rpm: int) -> float:
+def calc_rpm(throttle: float, speed: float, gear: int, motor_rpm: int) -> float:
     '''Simple RPM calculation based on throttle and speed.'''
     #TODO Implement RPM calculation based on karts state and relation to audio.
     pass
@@ -204,6 +204,11 @@ def boot():
 
 if __name__ == "__main__":
     #boot()
-    lights.turn_on(0)
-    time.sleep(10)
+    for i in range(len(lights)):
+        lights.turn_on(i)
+        time.sleep(0.5)
+    for i in range(5):
+        lights.toggle_all()
+        time.sleep(0.3)
+    lights.turn_off_all()
     lights.cleanup()

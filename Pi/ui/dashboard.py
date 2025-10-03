@@ -1,6 +1,7 @@
 from PySide6.QtWidgets import (QMainWindow, QFrame, QSplitter, 
                               QSizePolicy, QWidget, QVBoxLayout, QLabel, QHBoxLayout, QMessageBox, QApplication, QScrollArea)
 from PySide6.QtCore import Qt, QSettings, QSize, Signal, QTimer
+from PySide6.QtGui import QFont
 from ui.gauge import GaugeWidget
 from ui.car3d import Car3DWidget
 from ui.battery_gauge import BatteryGaugeWidget
@@ -10,6 +11,123 @@ import sys
 
 REFRESH_RATE = 1/58
 MAX_RPM = 14000 # Max RPM for the gauge, actual should go to about 14.5k
+
+class PopupNotification(QWidget):
+    """Square popup dialog for temporary notifications with title and subtitle."""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        self.setFixedSize(200, 200)  # Square popup
+        
+        # Create main layout
+        layout = QVBoxLayout(self)
+        layout.setContentsMargins(15, 15, 15, 15)
+        layout.setSpacing(10)
+        layout.setAlignment(Qt.AlignCenter)
+        
+        # Create container frame for styling
+        self.container = QFrame()
+        self.container.setStyleSheet("""
+            QFrame {
+                background-color: #2D2D2D;
+                border: 2px solid #555555;
+                border-radius: 15px;
+            }
+        """)
+        
+        # Container layout
+        container_layout = QVBoxLayout(self.container)
+        container_layout.setContentsMargins(20, 20, 20, 20)
+        container_layout.setSpacing(10)
+        container_layout.setAlignment(Qt.AlignCenter)
+        
+        # Title label (large font)
+        self.title_label = QLabel()
+        self.title_label.setAlignment(Qt.AlignCenter)
+        self.title_label.setWordWrap(True)
+        title_font = QFont()
+        title_font.setPointSize(16)
+        title_font.setBold(True)
+        self.title_label.setFont(title_font)
+        self.title_label.setStyleSheet("color: white; background-color: transparent;")
+        
+        # Subtitle label (smaller font)
+        self.subtitle_label = QLabel()
+        self.subtitle_label.setAlignment(Qt.AlignCenter)
+        self.subtitle_label.setWordWrap(True)
+        subtitle_font = QFont()
+        subtitle_font.setPointSize(10)
+        self.subtitle_label.setFont(subtitle_font)
+        self.subtitle_label.setStyleSheet("color: #CCCCCC; background-color: transparent;")
+        
+        # Add labels to container
+        container_layout.addWidget(self.title_label)
+        container_layout.addWidget(self.subtitle_label)
+        
+        # Add container to main layout
+        layout.addWidget(self.container)
+        
+        # Timer for auto-hide
+        self.hide_timer = QTimer()
+        self.hide_timer.setSingleShot(True)
+        self.hide_timer.timeout.connect(self.hide_popup)
+        
+        self.hide()  # Start hidden
+    
+    def show_notification(self, title, subtitle="", duration_ms=2000, background_color="#2D2D2D", title_color="white", subtitle_color="#CCCCCC"):
+        """
+        Show the popup notification with custom content and duration.
+        
+        Args:
+            title (str): Main title text (large font)
+            subtitle (str): Subtitle text (smaller font), optional
+            duration_ms (int): Duration to show popup in milliseconds (default: 2000ms = 2 seconds)
+            background_color (str): Background color (default: dark gray)
+            title_color (str): Title text color (default: white)
+            subtitle_color (str): Subtitle text color (default: light gray)
+        """
+        # Set text content
+        self.title_label.setText(title)
+        self.subtitle_label.setText(subtitle)
+        
+        # Update colors
+        self.container.setStyleSheet(f"""
+            QFrame {{
+                background-color: {background_color};
+                border: 2px solid #555555;
+                border-radius: 15px;
+            }}
+        """)
+        self.title_label.setStyleSheet(f"color: {title_color}; background-color: transparent;")
+        self.subtitle_label.setStyleSheet(f"color: {subtitle_color}; background-color: transparent;")
+        
+        # Hide subtitle if empty
+        if subtitle:
+            self.subtitle_label.show()
+        else:
+            self.subtitle_label.hide()
+        
+        # Center popup on parent if available
+        if self.parent():
+            parent_rect = self.parent().geometry()
+            popup_x = parent_rect.x() + (parent_rect.width() - self.width()) // 2
+            popup_y = parent_rect.y() + (parent_rect.height() - self.height()) // 2
+            self.move(popup_x, popup_y)
+        
+        # Show popup and start timer
+        self.show()
+        self.raise_()  # Bring to front
+        self.hide_timer.start(duration_ms)
+    
+    def hide_popup(self):
+        """Hide the popup notification."""
+        self.hide()
+    
+    def set_size(self, width, height):
+        """Set custom popup size (default is 200x200 square)."""
+        self.setFixedSize(width, height)
 
 class F1Dashboard(QMainWindow):
     """Main dashboard window that displays gauges and car visualization."""
@@ -236,6 +354,9 @@ class F1Dashboard(QMainWindow):
         self.right_bar_mode = "engine"  # "engine" or "regen"
         self.engine_tune_value = 0.0
         self.regen_brake_value = 0.0
+        
+        # Create popup notification widget
+        self.popup_notification = PopupNotification(self)
     
     def run(self):
         """Show the dashboard and run the application."""
@@ -503,6 +624,24 @@ class F1Dashboard(QMainWindow):
     def getRightBarMode(self):
         """Get the current right bar mode ('engine' or 'regen')."""
         return self.right_bar_mode
+    
+    def show_notification(self, title, subtitle="", duration_ms=2000, background_color="#2D2D2D", title_color="#FFFFFF", subtitle_color="#CCCCCC"):
+        """
+        Show a temporary popup notification.
+        
+        Args:
+            title (str): Main title text (large font)
+            subtitle (str): Subtitle text (smaller font), optional
+            duration_ms (int): Duration to show popup in milliseconds (default: 2000ms = 2 seconds)
+            background_color (str): Background color (default: dark gray)
+            title_color (str): Title text color (default: white)
+            subtitle_color (str): Subtitle text color (default: light gray)
+        
+        Example usage:
+            dashboard.show_notification("HEADLIGHTS", "ON", 1500, "#1E4A2E", "white", "#90EE90")
+            dashboard.show_notification("HAZARDS", "ACTIVATED", 2000, "#4A2E1E", "white", "#FFD700")
+        """
+        self.popup_notification.show_notification(title, subtitle, duration_ms, background_color, title_color, subtitle_color)
     
     def setWheelRotation(self, angle_degrees):
         """Set the wheel rotation angle in degrees."""
