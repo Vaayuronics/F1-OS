@@ -250,14 +250,14 @@ class GaugeWidget(QWidget):
                     
                     # Draw top digits (larger font, centered)
                     top_font = painter.font()
-                    top_font.setPointSize(40)  # Reduced from 48 to 40
+                    top_font.setPointSize(32) 
                     painter.setFont(top_font)
                     painter.drawText(QRect(0, int(center_y - 70), self.width(), 40), 
                                     Qt.AlignCenter, top_digits)
                     
                     # Draw bottom digits (smaller font)
                     bottom_font = painter.font()
-                    bottom_font.setPointSize(24)  # Reduced from 32 to 24
+                    bottom_font.setPointSize(24)
                     painter.setFont(bottom_font)
                     painter.drawText(QRect(0, int(center_y - 25), self.width(), 40), 
                                     Qt.AlignCenter, bottom_digits)
