@@ -13,7 +13,7 @@ TODO: Check to see if the usb ports on the Raspberry Pi are still not working wi
 
 pico = None
 arduino = None
-lights = LightManager([17, 27, 22, 23, 24, 25, 5, 6, 16].reverse(), ["Green 1", "Green 2", "Green 3", "Green 4", "Blue 1", "Blue 2", "Yellow", "Orange", "Red"])
+lights = LightManager([16, 6, 5, 25, 24, 23, 22, 27, 17], ["Green 1", "Green 2", "Green 3", "Green 4", "Blue 1", "Blue 2", "Yellow", "Orange", "Red"])
 dashboard = None
 ui_data_cond = threading.Condition()
 hardware_data_cond = threading.Condition()
@@ -154,7 +154,6 @@ def process_ui_data(pico_data, arduino_data):
         if 'throttle' in ui_data and 'speed' in ui_data:
             ui_data['rpm'] = calc_rpm(ui_data['throttle'], ui_data['speed'])
 
-
 def audio_loop():
     '''Play the sounds chunks and return '''
     global interrupted, sound_data, sound_data_cond
@@ -204,11 +203,15 @@ def boot():
 
 if __name__ == "__main__":
     #boot()
+    print("starting")
     for i in range(len(lights)):
         lights.turn_on(i)
         time.sleep(0.5)
+        print(f"turning on {i}")
     for i in range(5):
         lights.toggle_all()
         time.sleep(0.3)
+        print(f"toggle {i}")
     lights.turn_off_all()
     lights.cleanup()
+    print("finish")
