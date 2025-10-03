@@ -252,14 +252,14 @@ class GaugeWidget(QWidget):
                     top_font = painter.font()
                     top_font.setPointSize(32) 
                     painter.setFont(top_font)
-                    painter.drawText(QRect(0, int(center_y - 50), self.width(), 35), 
+                    painter.drawText(QRect(0, int(center_y - 52), self.width(), 35), 
                                     Qt.AlignCenter, top_digits)
                     
                     # Draw bottom digits (smaller font)
                     bottom_font = painter.font()
                     bottom_font.setPointSize(24)
                     painter.setFont(bottom_font)
-                    painter.drawText(QRect(0, int(center_y - 25), self.width(), 35), 
+                    painter.drawText(QRect(0, int(center_y - 22), self.width(), 35), 
                                     Qt.AlignCenter, bottom_digits)
                 else:
                     # For values < 1000, show normally without leading zeros

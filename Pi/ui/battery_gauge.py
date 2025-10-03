@@ -26,6 +26,15 @@ class BatteryGaugeWidget(QWidget):
         """Get the current battery level."""
         return self.battery_level
     
+    def mousePressEvent(self, event):
+        """Handle mouse clicks on the battery gauge to close the application."""
+        if event.button() == Qt.LeftButton:
+            # Find the top-level window and close it
+            window = self.window()
+            if window:
+                window.close()
+        super().mousePressEvent(event)
+    
     def paintEvent(self, event):
         """Render the battery gauge on screen."""
         painter = QPainter(self)
