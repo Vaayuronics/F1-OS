@@ -9,6 +9,7 @@ class Light:
         # Initialize GPIO only once for all Light instances
         if GPIO.getmode() is None or not GPIO.BCM:
             GPIO.setmode(GPIO.BCM)
+            GPIO.setwarnings(False) #idc if channel in use cuh
             
         GPIO.setup(self.pin, GPIO.OUT, initial=GPIO.LOW)
         self.state = False
@@ -47,5 +48,6 @@ class Light:
 
     @classmethod
     def cleanup_all(cls):
-        """Clean up all GPIO pins at once"""
+        """Clean up all GPIO pins at once.
+        Dont use if you dont want floating states."""
         GPIO.cleanup()

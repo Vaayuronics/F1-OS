@@ -213,5 +213,4 @@ if __name__ == "__main__":
         time.sleep(0.3)
         print(f"toggle {i}")
     lights.turn_off_all()
-    lights.cleanup()
     print("finish")
