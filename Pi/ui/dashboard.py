@@ -833,18 +833,8 @@ class F1Dashboard(QMainWindow):
     
     def closeEvent(self, event):
         """Override close event to save settings before closing.""" 
-        # Stop all timers safely
-        if hasattr(self, 'startup_timer') and self.startup_timer.isActive():
-            self.startup_timer.stop()
-        if hasattr(self, 'popup_notification') and hasattr(self.popup_notification, 'hide_timer'):
-            if self.popup_notification.hide_timer.isActive():
-                self.popup_notification.hide_timer.stop()
-        
-        # Save settings
         self.save_splitter_settings()
         self.save_camera_settings()
-        
-        # Call parent close event
         super().closeEvent(event)
     
     def set_telemetry_box_size(self, width, height):
@@ -939,21 +929,16 @@ class F1Dashboard(QMainWindow):
             # Phase 1: Ramp up from 0 to 100% over 2 seconds
             if elapsed < 2.0:
                 progress = elapsed / 2.0  # 0.0 to 1.0
+                throttle_value = progress  # 0.0 to 1.0
+                tune_value = progress     # 0.0 to 1.0
                 
                 # Apply smooth easing (ease-out)
-                eased_progress = 1 - (1 - progress) ** 3
+                throttle_value = 1 - (1 - throttle_value) ** 3
+                tune_value = 1 - (1 - tune_value) ** 3
                 
-                # Calculate values for different gauges
-                throttle_value = eased_progress
-                tune_value = eased_progress
-                rpm_value = eased_progress * MAX_RPM  # Scale to max RPM
-                speed_value = eased_progress * 60     # Scale to max speed (60 MPH)
-                
-                # Update all the gauges
+                # Update the gauges
                 self.setThrottle(throttle_value)
                 self.setTune(tune_value)
-                self.setRPM(rpm_value)
-                self.setSpeed(speed_value)
             else:
                 # Move to phase 2
                 self.animation_phase = 1
@@ -970,41 +955,26 @@ class F1Dashboard(QMainWindow):
                 # Map sine wave (-1 to 1) to range (0.8 to 1.0)
                 base_value = 0.9  # Center point
                 amplitude = 0.1   # ±10% oscillation
-                
-                # Calculate oscillating values for different gauges
                 throttle_value = base_value + (sine_wave * amplitude)
-                tune_value = base_value + (sine_wave * amplitude * 0.8)  # Slightly different
-                rpm_value = (base_value + (sine_wave * amplitude * 0.9)) * MAX_RPM
-                speed_value = (base_value + (sine_wave * amplitude * 0.7)) * 60
+                tune_value = base_value + (sine_wave * amplitude * 0.8)  # Slightly different for variety
                 
-                # Update all the gauges
+                # Update the gauges
                 self.setThrottle(throttle_value)
                 self.setTune(tune_value)
-                self.setRPM(rpm_value)
-                self.setSpeed(speed_value)
             else:
                 # Animation complete
                 self.end_startup_animation()
     
     def end_startup_animation(self):
         """End the startup animation and return to normal operation."""
-        # Stop timer safely on UI thread
-        if self.startup_timer.isActive():
-            self.startup_timer.stop()
+        self.startup_timer.stop()
         self.startup_animation_active = False
         
-        # Reset all gauges to default values
+        # Reset to default values
         self.setThrottle(0.0)
         self.setTune(0.0)
-        self.setRPM(0.0)
-        self.setSpeed(0.0)
         
         print("Startup animation complete!")
-    
-    def close_safely(self):
-        """Thread-safe method to close the dashboard from other threads."""
-        # Use QTimer.singleShot to execute close on the UI thread
-        QTimer.singleShot(0, self.close)
     
     def is_animation_active(self):
         """Check if startup animation is currently running."""
