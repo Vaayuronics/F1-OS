@@ -172,14 +172,27 @@ def calc_rpm(throttle: float, speed: float, gear: int, motor_rpm: int) -> float:
     #TODO Implement RPM calculation based on karts state and relation to audio.
     pass
 
+def start_dashboard():
+    """Start the dashboard UI in the main thread."""
+    global dashboard
+
+    dashboard = dash.F1Dashboard("ui/dashboard_settings.ini", "ui/model.fbx")
+    
+    dashboard.enable_fullscreen()
+    exit_code = dashboard.run()
+    while exit_code != 0:
+        print("Application exited with code:", exit_code, "restarting...")
+        exit_code = dashboard.run()
+    print("Application finished with exit code:", exit_code)
+    sys.exit(exit_code)
+
 def boot():
     print("Booting up system.")
 
-    global pico, arduino, dashboard
+    global pico, arduino
 
     pico = JSONSerialReader("/dev/pico")
     arduino = JSONSerialReader("/dev/arduino")
-    dashboard = dash.F1Dashboard("ui/dashboard_settings.ini", "ui/model.fbx")
 
     lighting_thread = threading.Thread(target=light_loop, daemon=True)
     lighting_thread.start()
@@ -193,16 +206,12 @@ def boot():
     audio_thread = threading.Thread(target=audio_loop, daemon=True)
     audio_thread.start()
 
-    dashboard.enable_fullscreen()
-    exit_code = dashboard.run()
-    while exit_code != 0:
-        print("Application exited with code:", exit_code, "restarting...")
-        exit_code = dashboard.run()
-    print("Application finished with exit code:", exit_code)
-    sys.exit(exit_code)
+    start_dashboard()
 
 if __name__ == "__main__":
     #boot()
+    start_dashboard()
+    time.sleep(1)
     print("starting")
     for i in range(len(lights)):
         lights.turn_on(i)
