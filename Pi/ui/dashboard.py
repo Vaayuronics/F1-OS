@@ -163,19 +163,16 @@ class F1Dashboard(QMainWindow):
         
         # Verify model exists and handle accordingly
         self.model_path = None
+        self.show_model_fallback_notification = False  # Flag for deferred notification
         if model_path:
             model_exists = os.path.exists(model_path)
             print(f"3D Model path: {model_path}")
             print(f"Model exists: {model_exists}")
             
             if not model_exists:
-                msg = QMessageBox()
-                msg.setIcon(QMessageBox.Warning)
-                msg.setText(f"Model file not found: {model_path}")
-                msg.setWindowTitle("Model Not Found")
-                msg.setStandardButtons(QMessageBox.Ok)
-                msg.setInformativeText("Using default fallback model instead.")
-                msg.exec()
+                print(f"Model file not found: {model_path}")
+                print("Using default fallback model instead.")
+                self.show_model_fallback_notification = True  # Show notification after UI is ready
                 self.model_path = None
             else:
                 self.model_path = model_path
@@ -357,6 +354,19 @@ class F1Dashboard(QMainWindow):
         
         # Create popup notification widget
         self.popup_notification = PopupNotification(self)
+        
+        # Show model fallback notification if needed (deferred from model verification)
+        if hasattr(self, 'show_model_fallback_notification') and self.show_model_fallback_notification:
+            # Use a timer to show notification after UI is fully rendered
+            from PySide6.QtCore import QTimer
+            QTimer.singleShot(500, lambda: self.show_notification(
+                "MODEL NOT FOUND",
+                "Using fallback model",
+                3000,  # 3 second duration
+                "#4A2E1E",  # Orange/brown background for warning
+                "white",
+                "#FFD700"   # Gold subtitle color
+            ))
     
     def run(self):
         """Show the dashboard and run the application."""

@@ -181,6 +181,7 @@ def start_dashboard():
     sys.exit(exit_code)
 
 def lights_boot_anim():
+    time.sleep(3)
     for i in range(len(lights)):
         lights.turn_on(i)
         time.sleep(0.5)
