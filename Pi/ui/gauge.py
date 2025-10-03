@@ -233,12 +233,44 @@ class GaugeWidget(QWidget):
         # Show custom center value if set, otherwise show the gauge value
         if self.custom_center_value is not None:
             center_text = str(self.custom_center_value)
+            # Move center number up to avoid overlap with TH/ENG TUN labels
+            painter.drawText(QRect(0, int(center_y - 50), self.width(), 70), 
+                            Qt.AlignCenter, center_text)
         else:
-            center_text = f"{int(self.current_value)}"
-            
-        # Move center number up to avoid overlap with TH/ENG TUN labels
-        painter.drawText(QRect(0, int(center_y - 50), self.width(), 70), 
-                        Qt.AlignCenter, center_text)
+            # Special stacked display for RPM gauge (only when title contains "RPM")
+            if "RPM" in self.title.upper():
+                rpm_value = int(self.current_value)
+                
+                # For values >= 1000, show top digits above bottom 3 digits
+                if rpm_value >= 1000:
+                    rpm_str = str(rpm_value)  # No padding, use actual digits
+                    # Split: everything except last 3 digits on top, last 3 on bottom
+                    top_digits = rpm_str[:-3]  # All but last 3
+                    bottom_digits = rpm_str[-3:]  # Last 3 digits
+                    
+                    # Draw top digits (larger font, centered)
+                    top_font = painter.font()
+                    top_font.setPointSize(48)  # Larger font for top
+                    painter.setFont(top_font)
+                    painter.drawText(QRect(0, int(center_y - 70), self.width(), 40), 
+                                    Qt.AlignCenter, top_digits)
+                    
+                    # Draw bottom digits (smaller font)
+                    bottom_font = painter.font()
+                    bottom_font.setPointSize(32)  # Smaller font for bottom
+                    painter.setFont(bottom_font)
+                    painter.drawText(QRect(0, int(center_y - 25), self.width(), 40), 
+                                    Qt.AlignCenter, bottom_digits)
+                else:
+                    # For values < 1000, show normally without leading zeros
+                    center_text = str(rpm_value)  # No leading zeros
+                    painter.drawText(QRect(0, int(center_y - 50), self.width(), 70), 
+                                    Qt.AlignCenter, center_text)
+            else:
+                # Normal display for non-RPM gauges
+                center_text = f"{int(self.current_value)}"
+                painter.drawText(QRect(0, int(center_y - 50), self.width(), 70), 
+                                Qt.AlignCenter, center_text)
         
         # Reset font for tick marks (reduced by half)
         tick_font = painter.font()
