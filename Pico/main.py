@@ -14,8 +14,12 @@ LED.on()  # Turn on immediately to show we're starting
 
 # Defining objects
 gyro = gyro_module.Gyro(16, 17)
-#NOTE: Headlights should also turn on a rear lights like car do at night. Only two of the three lights though in upside down equalatral triangle, the side ones. Top one is brake light. Hazards flash all lights.
-buttons = [Button(0, "Shift Emulation Toggle"), Button(1, "Headlights"), Button(2, "Hazards"),  Button(3, "Change Engine"), Button(4, "Change Music"), Button( 5,"DRS"), Button(6, "Start"), Button(7, "Stop"), Button(8, "Play/Pause"), Button(9, "Horn"), Button(10, "Auto Turn Signal Toggle")]
+#NOTE: Headlights should also turn on a rear lights like car do at night. 
+# Only two of the three lights though in upside down equalatral triangle, the side ones. 
+# Top one is brake light. Hazards flash all lights.
+buttons = [Button(0, "Shift Emulation Toggle"), Button(1, "Headlights"), Button(2, "Hazards"),  Button(3, "Change Engine"), 
+           Button(4, "Change Music"), Button( 5,"DRS"), Button(6, "Start"), Button(7, "Stop"), 
+           Button(8, "Play/Pause"), Button(9, "Horn"), Button(10, "Auto Turn Signal Toggle")]
 knobs = [Knob(15, 16, 17, "Engine Vol"), Knob(19, 20, 21, "Engine Tune"), Knob(22, 24, 25, "Music Vol")]  # dt, clk, sw
 poller = select.poll()
 last_led_toggle = 0

@@ -32,7 +32,7 @@ def upload_folder(local_folder, pico_folder=""):
 
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        print("Usage: python upload_to_pico.py <local_folder> [target_folder_on_pico]")
+        print("Usage: python mpDirUp.py <local_folder> [target_folder_on_pico]")
     else:
         local = sys.argv[1]
         remote = sys.argv[2] if len(sys.argv) > 2 else ""

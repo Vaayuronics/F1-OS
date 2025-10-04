@@ -382,50 +382,50 @@ class F1Dashboard(QMainWindow):
     
     def _apply_data_dict(self, data: dict):
         """Apply telemetry data to widgets. Must run on the UI thread."""
-        if 'rpm' in data:
-            self.setRPM(data['rpm'])
-            data.pop('rpm')
-        if 'speed' in data:
-            self.setSpeed(data['speed'])
-            data.pop('speed')
-        if 'throttle' in data:
+        if 'RPM' in data:
+            self.setRPM(data['RPM'])
+            data.pop('RPM')
+        if 'Speed' in data:
+            self.setSpeed(data['Speed'])
+            data.pop('Speed')
+        if 'Throttle' in data:
             if not self.startup_animation_active:
-                self.setThrottle(data['throttle'])
-                data.pop('throttle')
+                self.setThrottle(data['Throttle'])
+                data.pop('Throttle')
             else:
-                data.pop('throttle')  # Remove but don't apply during animation
-        if 'engine_tune' in data:
+                data.pop('Throttle')  # Remove but don't apply during animation
+        if 'Engine Tune' in data:
             if not self.startup_animation_active:
-                self.setEnginetune(data['engine_tune'])
-                data.pop('engine_tune')
+                self.setEnginetune(data['Engine Tune'])
+                data.pop('Engine Tune')
             else:
-                data.pop('engine_tune')
-        if 'regen_brake' in data:
+                data.pop('Engine Tune')
+        if 'Regen Brake' in data:
             if not self.startup_animation_active:
-                self.setRegenBrake(data['regen_brake'])
-                data.pop('regen_brake')
+                self.setRegenBrake(data['Regen Brake'])
+                data.pop('Regen Brake')
             else:
-                data.pop('regen_brake')
-        if 'right_bar_switch' in data:
+                data.pop('Regen Brake')
+        if 'Mode Switch' in data:
             # Detect switch press (assuming it's a boolean or toggle signal)
-            if data['right_bar_switch']:
+            if data['Mode Switch']:
                 self.toggle_right_bar_mode()
-            data.pop('right_bar_switch')
-        if 'wheel_rotation' in data:
-            self.setWheelRotation(data['wheel_rotation'])
-            data.pop('wheel_rotation')
-        if 'gear' in data:
-            self.setGear(data['gear'])
-            data.pop('gear')
-        if 'battery' in data:
-            self.setBattery(data['battery'])
-            data.pop('battery')
-        if 'engine_volume' in data:
-            self.setEngineVolume(data['engine_volume'])
-            data.pop('engine_volume')
-        if 'music_volume' in data:
-            self.setMusicVolume(data['music_volume'])
-            data.pop('music_volume')
+            data.pop('Mode Switch')
+        if 'Wheel Rotation' in data:
+            self.setWheelRotation(data['Wheel Rotation'])
+            data.pop('Wheel Rotation')
+        if 'Gear' in data:
+            self.setGear(data['Gear'])
+            data.pop('Gear')
+        if 'Battery' in data:
+            self.setBattery(data['Battery'])
+            data.pop('Battery')
+        if 'Engine Volume' in data:
+            self.setEngineVolume(data['Engine Volume'])
+            data.pop('Engine Volume')
+        if 'Music Volume' in data:
+            self.setMusicVolume(data['Music Volume'])
+            data.pop('Music Volume')
 
         # Update telemetry display with remaining fields
         display_data = {k: v for k, v in data.items()}

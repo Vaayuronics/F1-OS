@@ -1,10 +1,22 @@
 import time
 from engine.player import EngineAudioPlayer
 
-BASE_INPUT_PATH = "engine/audio/"
-BASE_OUTPUT_PATH = "engine/modio/"
-CHANNELS = 2
-
+ENGINE_PATH = "engine/audio/"
+MUSIC_PATH = "engine/music/"
+NOTIFICATIONS_PATH = "engine/notifications/"
+notifier = EngineAudioPlayer()
+engineer = EngineAudioPlayer(chunk_duration= 0.5, max_buffer_size=3)
+musicer = EngineAudioPlayer(max_buffer_size=5)
+music = []
+f1_v10 = {}
+porche = {}
+horn = None
+curtime = 0.0
+maxed = False
+idled = False
+notifications = {}
+TRACKS = len(music)
+porche = False
 
 def test_latency():
     '''NOTE: Initial stretch for librosa module as a whole will take a long time. Use librosa to play the startup audio at like 1.01 times speed or something to initialize JIT.'''
@@ -32,6 +44,84 @@ def test_latency():
     print(f"Overall elapsed time: {time.time() - overall_start:.3f}s")
     player.stop()
 
-#TODO Implement sound system using EngineAudioPlayer
-def engine_audio():
+def load_tracks():
+    '''Load all tracks into memory.'''
+    global music, f1_v10, porche, notifications
+    # Load f1 data
+    f1_v10['accel'] = EngineAudioPlayer.load_audio_wav(ENGINE_PATH + "accel.wav")
+    f1_v10['decel'] = EngineAudioPlayer.load_audio_wav(ENGINE_PATH + "decel.wav")
+    f1_v10['idle'] = EngineAudioPlayer.load_audio_wav(ENGINE_PATH + "Idle.wav")
+    f1_v10['start'] = EngineAudioPlayer.load_audio_wav(ENGINE_PATH + "Start.wav")
+    f1_v10['stop'] = EngineAudioPlayer.load_audio_wav(ENGINE_PATH + "Stop.wav")
+    f1_v10['max_rpm'] = EngineAudioPlayer.load_audio_wav(ENGINE_PATH + "max_rpm.wav")
+    # Load porche data
+    porche['accel'] = EngineAudioPlayer.load_audio_wav(ENGINE_PATH + "gt3R.wav")
+    #TODO: Add more sounds and splice the porche sound into accel, decel, idle, start, stop, max_rpm
+    # Horn
+    #TODO: Replace with real horn sound
+    # Notifications
+    #TODO: Add real notification sounds
+    #Music
+    #TODO: Load music tracks
+
+def play_startup_sound():
+    '''Play the startup sound to initialize audio system.'''
+    #TODO: Need to add futureistic startup sound
     pass
+
+def play_f1_start():
+    '''Play the F1 engine start sound.'''
+    engineer.play_chunk(f1_v10['start'])
+
+def set_porche_mode(enabled: bool):
+    '''Enable or disable porche engine mode.'''
+    global porche
+    porche = enabled
+
+def play_horn():
+    '''Play the horn sound.'''
+    engineer.play_chunk(horn)
+
+def play_audio(accel: bool, speed: float, engine_vol: int = 100, music_vol: int = 100):
+    '''Play engine sound based on acceleration and speed.'''
+    engineer.set_volume(engine_vol / 100.0) # Scale 0-100 to 0.0-1.0
+    musicer.set_volume(music_vol / 100.0) # Scale 0-100 to 0.0-1.0
+    if porche:
+        pass #TODO: Implement porche audio logic
+    else:
+        play_f1_audio(accel, speed)
+    #TODO: Implement music playback logic
+
+def play_f1_audio(accel: bool, speed: float):
+    '''Play F1 engine sound based on acceleration and speed.'''
+    global curtime, maxed, idled
+    #NOTE: May need to set speed to 0 when idling or maxed to prevent weird speedups
+    data = None
+    if accel and maxed:
+        data = f1_v10['max_rpm']
+    elif not accel and idled:
+        data = f1_v10['idle']
+    elif accel and not maxed:
+        data = f1_v10['accel']
+        idled = False # Reset idled when accelerating
+    elif not accel and not idled:
+        data = f1_v10['decel']
+        maxed = False # Reset maxed when decelerating
+    data = EngineAudioPlayer.transform_audio(data, curtime, engineer.get_chunk_duration(), speed)
+    if data is None:
+        if accel and not maxed:
+            maxed = True
+            curtime = 0.0
+            play_f1_audio(accel, speed) # Recursively call to play max rpm sound
+            return
+        elif not accel and not idled:
+            idled = True
+            curtime = 0.0
+            play_f1_audio(accel, speed) # Recursively call to play idle sound
+            return
+        else:
+            curtime = 0.0
+            play_f1_audio(accel, speed) # Recursively call to loop current track
+            return
+    curtime += engineer.get_chunk_duration() * speed
+    engineer.play_chunk(data)

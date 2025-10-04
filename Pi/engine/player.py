@@ -25,6 +25,7 @@ class EngineAudioPlayer:
         self.queue_lock = Lock()
         self.running_lock = Lock()
         block_size = EngineAudioPlayer._calculate_optimal_blocksize(chunk_duration)
+        self.chunk_duration = chunk_duration
 
         self.stream = sd.OutputStream(
             samplerate=SAMPLE_RATE,
@@ -37,6 +38,10 @@ class EngineAudioPlayer:
         
         self.writer_thread = Thread(target=self._buffer_writer, daemon=True)
         self.writer_thread.start()
+
+    def get_chunk_duration(self) -> float:
+        """Get the current chunk duration in seconds."""
+        return self.chunk_duration
 
     def set_volume(self, volume: float) -> None:
         """Set output volume in range [0.0, 1.0]. Values are clamped."""
