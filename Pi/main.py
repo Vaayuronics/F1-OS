@@ -290,7 +290,7 @@ def process_data(pico_data, arduino_data):
                                 hardware_data['STOP'] = True 
                             if 'Play/Pause' in buttons and buttons['Play/Pause']:
                                 persist_data['Pause'] = not persist_data['Pause']
-                            if 'Auto Turn Signal Toggle' in buttons and buttons['Auto Turn Signal Toggle'].get('pressed', True):
+                            if 'Auto Turn Signal Toggle' in buttons and buttons['Auto Turn Signal Toggle']:
                                 ui_data['Alert Title'] = f"Auto Turn Signal {'ON' if not persist_data['Auto Turn Signal'] else 'OFF'}"
                                 ui_data['Alert Message'] = "Auto turn signal has been toggled."
                                 persist_data['Auto Turn Signal'] = not persist_data['Auto Turn Signal']
