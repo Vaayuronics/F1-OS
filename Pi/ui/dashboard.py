@@ -275,6 +275,28 @@ class F1Dashboard(QMainWindow):
         self.telemetry_scroll.setWidget(self.telemetry_content_widget)
         telemetry_main_layout.addWidget(self.telemetry_scroll)
         
+        # Initialize telemetry widget pools for ultra-fast updates
+        self._telemetry_widget_pool = {}  # Pool of reusable row widgets
+        self._telemetry_active_keys = []  # Currently displayed keys in order
+        self._max_telemetry_rows = 20  # Pre-allocate this many rows
+        
+        # Pre-create widget pool
+        scroll_width = self.telemetry_scroll.width()
+        base_font_size = max(8, min(14, int(scroll_width / 30)))
+        for i in range(self._max_telemetry_rows):
+            row_widget, label_widget, value_widget = self._create_telemetry_row(base_font_size)
+            row_widget.hide()  # Start hidden
+            self.telemetry_content_layout.addWidget(row_widget)
+            self._telemetry_widget_pool[i] = {
+                'row': row_widget,
+                'label': label_widget,
+                'value': value_widget,
+                'key': None  # Current key being displayed
+            }
+        
+        # Add stretch at the end
+        self.telemetry_content_layout.addStretch()
+        
         # Create volume gauges
         self.engine_volume_gauge = VolumeGaugeWidget("ENG", "engine")
         self.engine_volume_gauge.setVolumeLevel(75)  # Default engine volume
@@ -696,86 +718,61 @@ class F1Dashboard(QMainWindow):
         self.rpm_gauge.setThrottle(0)
         self.mph_gauge.setValue(0)
     
-    def updateTelemetryDisplay(self, data_dict):
-        """Update the telemetry data space with custom information."""
-        # Initialize telemetry cache if it doesn't exist
-        if not hasattr(self, '_telemetry_cache'):
-            self._telemetry_cache = {}
-            self._telemetry_widgets = {}
+    def _create_telemetry_row(self, base_font_size):
+        """Create a reusable telemetry row widget."""
+        row_layout = QHBoxLayout()
+        row_layout.setContentsMargins(0, 0, 0, 0)
         
-        # Calculate dynamic font size based on telemetry scroll area width
-        scroll_width = self.telemetry_scroll.width()
-        base_font_size = max(8, min(14, int(scroll_width / 30)))
+        label_widget = QLabel()
+        label_widget.setStyleSheet(f"color: #AAA; font-size: {base_font_size}px;")
+        label_widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+        label_widget.setWordWrap(True)
         
-        if data_dict:
-            # Check if data has actually changed
-            if self._telemetry_cache == data_dict:
-                return  # No changes, skip expensive UI update
-            
-            # Only rebuild if keys have changed
-            if set(self._telemetry_cache.keys()) != set(data_dict.keys()):
-                # Keys changed, need to rebuild layout
-                self._rebuild_telemetry_layout(data_dict, base_font_size)
-            else:
-                # Just update values (much faster)
-                for label, value in data_dict.items():
-                    if label in self._telemetry_widgets:
-                        value_widget = self._telemetry_widgets[label]
-                        value_widget.setText(f"{value}")
-            
-            self._telemetry_cache = data_dict.copy()
-        else:
-            # Clear and show placeholder
-            if self._telemetry_cache:
-                self._rebuild_telemetry_layout({}, base_font_size)
-                self._telemetry_cache = {}
+        value_widget = QLabel()
+        value_widget.setStyleSheet(f"color: white; font-size: {base_font_size}px; font-weight: bold;")
+        value_widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
+        value_widget.setWordWrap(True)
+        
+        row_layout.addWidget(label_widget, 1)
+        row_layout.addWidget(value_widget, 1)
+        
+        row_widget = QWidget()
+        row_widget.setLayout(row_layout)
+        row_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        
+        return row_widget, label_widget, value_widget
     
-    def _rebuild_telemetry_layout(self, data_dict, base_font_size):
-        """Rebuild the entire telemetry layout (only when structure changes)."""
-        # Clear existing content
-        for i in reversed(range(self.telemetry_content_layout.count())): 
-            child = self.telemetry_content_layout.itemAt(i)
-            if child.widget():
-                child.widget().setParent(None)
-            elif child.layout():
-                self.clearLayout(child.layout())
+    def updateTelemetryDisplay(self, data_dict):
+        """Update telemetry display with ZERO widget creation - only setText() calls."""
+        if not data_dict:
+            # Hide all rows
+            for i in range(self._max_telemetry_rows):
+                self._telemetry_widget_pool[i]['row'].hide()
+                self._telemetry_widget_pool[i]['key'] = None
+            return
         
-        self._telemetry_widgets = {}
+        data_keys = list(data_dict.keys())
+        num_items = len(data_keys)
         
-        if data_dict:
-            for label, value in data_dict.items():
-                row_layout = QHBoxLayout()
-                row_layout.setContentsMargins(0, 0, 0, 0)
+        # Update visible rows with new data (ONLY setText calls)
+        for i in range(self._max_telemetry_rows):
+            if i < num_items:
+                key = data_keys[i]
+                value = data_dict[key]
+                pool_entry = self._telemetry_widget_pool[i]
                 
-                label_widget = QLabel(f"{label}:")
-                label_widget.setStyleSheet(f"color: #AAA; font-size: {base_font_size}px;")
-                label_widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
-                label_widget.setWordWrap(True)
+                # Only update label if key changed
+                if pool_entry['key'] != key:
+                    pool_entry['label'].setText(f"{key}:")
+                    pool_entry['key'] = key
                 
-                value_widget = QLabel(f"{value}")
-                value_widget.setStyleSheet(f"color: white; font-size: {base_font_size}px; font-weight: bold;")
-                value_widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
-                value_widget.setWordWrap(True)
-                
-                # Store reference to value widget for fast updates
-                self._telemetry_widgets[label] = value_widget
-                
-                row_layout.addWidget(label_widget, 1)
-                row_layout.addWidget(value_widget, 1)
-                
-                row_widget = QWidget()
-                row_widget.setLayout(row_layout)
-                row_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-                
-                self.telemetry_content_layout.addWidget(row_widget)
-            
-            self.telemetry_content_layout.addStretch()
-        else:
-            placeholder = QLabel("No telemetry data")
-            placeholder.setStyleSheet(f"color: #555; font-size: {base_font_size}px;")
-            placeholder.setAlignment(Qt.AlignCenter)
-            placeholder.setWordWrap(True)
-            self.telemetry_content_layout.addWidget(placeholder)
+                # Always update value (this is the fast path)
+                pool_entry['value'].setText(f"{value}")
+                pool_entry['row'].show()
+            else:
+                # Hide unused rows
+                self._telemetry_widget_pool[i]['row'].hide()
+                self._telemetry_widget_pool[i]['key'] = None
     
     def clearLayout(self, layout):
         """Helper method to clear a layout recursively."""
