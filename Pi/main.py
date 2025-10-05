@@ -121,6 +121,7 @@ def hardware_update_loop():
         process_data(pico_data, arduino_data)
         print(f"Process data time: {time.time() - process_start:.3f}s")
         print(f"Hardware poll and process time: {time.time() - start:.3f}s")
+        time.sleep(0.01)  # Polling interval (Needed to guarantee other threads run)
 
 def hardware_loop():
     '''Complete operations on hardware data'''
