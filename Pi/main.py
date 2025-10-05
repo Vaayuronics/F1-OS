@@ -95,7 +95,7 @@ def hardware_update_loop():
             pico_data = pico.poll()
             arduino_data = arduino.poll()
             process_data(pico_data, arduino_data)
-            time.sleep(0.05)  # Polling interval
+            time.sleep(0.1)  # Polling interval
         except Exception as e:
             print(f"[hardware_update_loop] Error: {e}")
             if interrupted.is_set():
@@ -143,7 +143,7 @@ def hardware_loop():
                     # Emergency stop throttle
                     pass
             
-            time.sleep(0.05)
+            time.sleep(0.01)
         except Exception as e:
             print(f"[hardware_loop] Error: {e}")
             if interrupted.is_set():
