@@ -71,7 +71,11 @@ class PopupNotification(QWidget):
         # Timer for auto-hide
         self.hide_timer = QTimer()
         self.hide_timer.setSingleShot(True)
-        self.hide_timer.timeout.connect(self.hide_popup)
+        self.hide_timer.timeout.connect(self._on_hide_timeout)
+        
+        # Queue for handling multiple notifications
+        self.notification_queue = []
+        self.is_showing = False
         
         self.hide()  # Start hidden
     
@@ -87,23 +91,47 @@ class PopupNotification(QWidget):
             title_color (str): Title text color (default: white)
             subtitle_color (str): Subtitle text color (default: light gray)
         """
+        notification = {
+            'title': title,
+            'subtitle': subtitle,
+            'duration_ms': duration_ms,
+            'background_color': background_color,
+            'title_color': title_color,
+            'subtitle_color': subtitle_color
+        }
+        
+        # If currently showing a notification, queue this one
+        if self.is_showing:
+            self.notification_queue.append(notification)
+        else:
+            # Show immediately
+            self._display_notification(notification)
+    
+    def _display_notification(self, notification):
+        """Internal method to actually display a notification."""
+        self.is_showing = True
+        
+        # Stop any existing timer
+        if self.hide_timer.isActive():
+            self.hide_timer.stop()
+        
         # Set text content
-        self.title_label.setText(title)
-        self.subtitle_label.setText(subtitle)
+        self.title_label.setText(notification['title'])
+        self.subtitle_label.setText(notification['subtitle'])
         
         # Update colors
         self.container.setStyleSheet(f"""
             QFrame {{
-                background-color: {background_color};
+                background-color: {notification['background_color']};
                 border: 2px solid #555555;
                 border-radius: 15px;
             }}
         """)
-        self.title_label.setStyleSheet(f"color: {title_color}; background-color: transparent;")
-        self.subtitle_label.setStyleSheet(f"color: {subtitle_color}; background-color: transparent;")
+        self.title_label.setStyleSheet(f"color: {notification['title_color']}; background-color: transparent;")
+        self.subtitle_label.setStyleSheet(f"color: {notification['subtitle_color']}; background-color: transparent;")
         
         # Hide subtitle if empty
-        if subtitle:
+        if notification['subtitle']:
             self.subtitle_label.show()
         else:
             self.subtitle_label.hide()
@@ -119,11 +147,31 @@ class PopupNotification(QWidget):
         self.show()
         self.raise_()  # Bring to front
         self.activateWindow()  # Ensure it gets focus and stays on top
-        self.hide_timer.start(duration_ms)
+        
+        # Start timer for this notification
+        self.hide_timer.start(notification['duration_ms'])
+    
+    def _on_hide_timeout(self):
+        """Called when the hide timer expires."""
+        self.hide()
+        self.is_showing = False
+        
+        # Show next notification in queue if any
+        if self.notification_queue:
+            next_notification = self.notification_queue.pop(0)
+            self._display_notification(next_notification)
     
     def hide_popup(self):
-        """Hide the popup notification."""
+        """Hide the popup notification (for manual dismissal)."""
+        if self.hide_timer.isActive():
+            self.hide_timer.stop()
         self.hide()
+        self.is_showing = False
+        
+        # Show next notification in queue if any
+        if self.notification_queue:
+            next_notification = self.notification_queue.pop(0)
+            self._display_notification(next_notification)
     
     def set_size(self, width, height):
         """Set custom popup size (default is 200x200 square)."""
