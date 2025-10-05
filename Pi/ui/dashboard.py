@@ -11,7 +11,6 @@ import sys
 
 REFRESH_RATE = 1/58
 MAX_RPM = 14000 # Max RPM for the gauge, actual should go to about 14.5k
-prev_run = 0
 class PopupNotification(QWidget):
     """Square popup dialog for temporary notifications with title and subtitle."""
     
@@ -698,10 +697,41 @@ class F1Dashboard(QMainWindow):
         self.mph_gauge.setValue(0)
     
     def updateTelemetryDisplay(self, data_dict):
-        """Update the telemetry data space with custom information.""" 
-        import time
-        print(f"Time since last run: {time.time() - prev_run}")
-        prev_run = time.time()
+        """Update the telemetry data space with custom information."""
+        # Initialize telemetry cache if it doesn't exist
+        if not hasattr(self, '_telemetry_cache'):
+            self._telemetry_cache = {}
+            self._telemetry_widgets = {}
+        
+        # Calculate dynamic font size based on telemetry scroll area width
+        scroll_width = self.telemetry_scroll.width()
+        base_font_size = max(8, min(14, int(scroll_width / 30)))
+        
+        if data_dict:
+            # Check if data has actually changed
+            if self._telemetry_cache == data_dict:
+                return  # No changes, skip expensive UI update
+            
+            # Only rebuild if keys have changed
+            if set(self._telemetry_cache.keys()) != set(data_dict.keys()):
+                # Keys changed, need to rebuild layout
+                self._rebuild_telemetry_layout(data_dict, base_font_size)
+            else:
+                # Just update values (much faster)
+                for label, value in data_dict.items():
+                    if label in self._telemetry_widgets:
+                        value_widget = self._telemetry_widgets[label]
+                        value_widget.setText(f"{value}")
+            
+            self._telemetry_cache = data_dict.copy()
+        else:
+            # Clear and show placeholder
+            if self._telemetry_cache:
+                self._rebuild_telemetry_layout({}, base_font_size)
+                self._telemetry_cache = {}
+    
+    def _rebuild_telemetry_layout(self, data_dict, base_font_size):
+        """Rebuild the entire telemetry layout (only when structure changes)."""
         # Clear existing content
         for i in reversed(range(self.telemetry_content_layout.count())): 
             child = self.telemetry_content_layout.itemAt(i)
@@ -710,12 +740,8 @@ class F1Dashboard(QMainWindow):
             elif child.layout():
                 self.clearLayout(child.layout())
         
-        # Calculate dynamic font size based on telemetry scroll area width
-        scroll_width = self.telemetry_scroll.width()
-        # Scale font size: 8px minimum, 14px maximum, based on width
-        base_font_size = max(8, min(14, int(scroll_width / 30)))
+        self._telemetry_widgets = {}
         
-        # Add new data rows
         if data_dict:
             for label, value in data_dict.items():
                 row_layout = QHBoxLayout()
@@ -724,27 +750,27 @@ class F1Dashboard(QMainWindow):
                 label_widget = QLabel(f"{label}:")
                 label_widget.setStyleSheet(f"color: #AAA; font-size: {base_font_size}px;")
                 label_widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
-                label_widget.setWordWrap(True)  # Allow text wrapping
+                label_widget.setWordWrap(True)
                 
                 value_widget = QLabel(f"{value}")
                 value_widget.setStyleSheet(f"color: white; font-size: {base_font_size}px; font-weight: bold;")
                 value_widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
-                value_widget.setWordWrap(True)  # Allow text wrapping
+                value_widget.setWordWrap(True)
                 
-                row_layout.addWidget(label_widget, 1)  # Give proportional space
-                row_layout.addWidget(value_widget, 1)  # Give proportional space
+                # Store reference to value widget for fast updates
+                self._telemetry_widgets[label] = value_widget
                 
-                # Create a widget to hold this row
+                row_layout.addWidget(label_widget, 1)
+                row_layout.addWidget(value_widget, 1)
+                
                 row_widget = QWidget()
                 row_widget.setLayout(row_layout)
                 row_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
                 
                 self.telemetry_content_layout.addWidget(row_widget)
-                
-            # Add stretch to push content to top
+            
             self.telemetry_content_layout.addStretch()
         else:
-            # Add placeholder if no data
             placeholder = QLabel("No telemetry data")
             placeholder.setStyleSheet(f"color: #555; font-size: {base_font_size}px;")
             placeholder.setAlignment(Qt.AlignCenter)

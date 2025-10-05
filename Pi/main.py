@@ -212,9 +212,9 @@ def process_data(pico_data, arduino_data):
     """Combine and process data from pico and arduino.\n
     Operate on any hardware instructions.\n
     Return combined data for UI."""
-    global ui_data, ui_data_ready, ui_data_lock
-    global hardware_data, hardware_data_ready, hardware_data_lock
-    global sound_data, sound_data_ready, sound_data_lock
+    global ui_data, ui_data_lock
+    global hardware_data, hardware_data_lock
+    global sound_data, sound_data_lock
     global cur_gear
 
     # Create new data dicts to populate (work outside locks)
