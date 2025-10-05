@@ -24,6 +24,8 @@ gear_down = Button(19, "Gear Down")
 cur_gear = 0 # Supposedly int operations are atomic in python so this should be fine without a lock
 dashboard = None
 
+MAX_THROTTLE_DEG = 135
+
 # Better synchronization with locks and ready flags
 ui_data_lock = threading.Lock()
 hardware_data_lock = threading.Lock()
@@ -82,7 +84,7 @@ def get_ui_data():
     global ui_data, ui_data_ready, ui_data_lock
     with ui_data_lock:
         if ui_data_ready and ui_data:
-            return copy.deepcopy(ui_data)
+            return ui_data.copy()
     return None
 
 def hardware_update_loop():
@@ -111,21 +113,14 @@ def hardware_loop():
     while not interrupted.is_set():
         try:
             data = None
-            rpm = 0
             
             # Get hardware data
             with hardware_data_lock:
                 if hardware_data_ready and hardware_data:
-                    data = copy.deepcopy(hardware_data)
-            
-            # Get RPM from ui_data for lights
-            with ui_data_lock:
-                if ui_data_ready and ui_data:
-                    rpm = ui_data.get('RPM', 0)
-            
+                    data = hardware_data.copy()
+
             # Update RPM lights
-            if rpm > 0:
-                update_rpm_lights(rpm)
+            update_rpm_lights(data.get('RPM', 0))
             
             if data:
                 #TODO: Process hardware data
@@ -166,7 +161,7 @@ def audio_loop():
             data = None
             with sound_data_lock:
                 if sound_data_ready and sound_data:
-                    data = copy.deepcopy(sound_data)
+                    data = sound_data.copy()
             
             if data:
                 if data.get('Start', False):
@@ -400,13 +395,12 @@ def process_data(pico_data, arduino_data):
             new_sound_data['Speed'] = speed
             new_ui_data['RPM'] = rpm
             new_ui_data['Speed'] = arduino_data['Speed']
-            new_ui_data['Throttle'] = arduino_data['Throttle']
+            new_ui_data['Throttle'] = arduino_data['Throttle'] / MAX_THROTTLE_DEG * 100  # Scale to 0-100
             new_hardware_data['Brake'] = arduino_data['Brake']
             new_hardware_data['Throttle'] = arduino_data['Throttle']
+            new_hardware_data['RPM'] = rpm
             new_ui_data['Prev Speed'] = speed
             new_ui_data['Prev Time'] = time.time()
-            
-            print(f"[process_data] Set RPM in ui_data: {rpm}")
     
     # Update shared data with minimal lock time
     if new_ui_data:
