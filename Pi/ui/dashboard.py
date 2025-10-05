@@ -835,7 +835,6 @@ class F1Dashboard(QMainWindow):
                 self.settings.setValue("camera/position", ",".join(str(x) for x in pos))
                 self.settings.setValue("camera/viewCenter", ",".join(str(x) for x in center))
                 self.settings.setValue("camera/upVector", ",".join(str(x) for x in up))
-                print(f"Saved camera settings: {camera_settings}")
             except Exception as e:
                 print(f"Error saving camera settings: {e}")
     
