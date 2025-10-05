@@ -1,4 +1,4 @@
-from devices.jerial import JSONSerialReader
+from devices.testerial import JSONSerialReader
 import engine.soundsys as sound
 import time
 import threading

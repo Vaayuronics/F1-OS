@@ -1,4 +1,4 @@
-from testerial import JSONSerialReader
+from Pi.devices.testerial import JSONSerialReader
 import time
 import threading
 
