@@ -9,7 +9,7 @@
 //Pin values
 const uint8_t analogThrottle = A0;
 const uint8_t analogBrake = A1;
-const int digitalSpeed = 2;  // Pin where Hall effect sensor is connected
+const int digitalSpeed = 2;  // Pin where Hall effect sensor is connected (speed sensor)
 //Saved values
 unsigned long lastCalc = 0;
 unsigned long pulseCount = 0;
@@ -17,16 +17,19 @@ float speedMph = 0;
 //Editable values
 const int pulses = 2;
 const float wheelCircumference = 12 * PI; // In inches
-const int maxThrottle = 35;
-const int minThrottle = 0;
+const int maxThrottle = 135; // Max angle of the potentiometer
+const int minThrottle = 0; // Min angle of the potentiometer
 int lastButtonState = HIGH; // Last state of the button
 
 // Reads data from a given analog pin and returns it as an angle (-180, 180).
 float readPedal(uint8_t analogPin)
 {
   int raw = analogRead(analogPin);
+  //Serial.print("Raw Value: ");
+  //Serial.println(raw);
   float angle = (raw * (360.0 / 1023.0)) - 180;  // Convert to degrees
-
+  //Serial.print("Angle: ");
+  //Serial.println(angle);
   if(angle < minThrottle)
   {
     angle = minThrottle; // To cap min value of potentiometer
@@ -94,15 +97,19 @@ void loop()
   float throttleAngle = readPedal(analogThrottle);
   float brakeAngle = readPedal(analogBrake);
   float speed = readSpeed();
+  //Serial.print("Throttle Angle: ");
+  //Serial.println(throttleAngle);
 
   if (Serial.available() > 0) 
   {
     // Create a JSON document
     JsonDocument message;
+    String incoming = Serial.readStringUntil('\n');
+    // Deserialize the incoming JSON
+    deserializeJson(message, incoming);  // Deserialize the incoming JSON
 
-    deserializeJson(message, Serial.readStringUntil('\n'));  // Deserialize the incoming JSON
-
-    if(message["command"] == "poll")
+    const char* command = message["command"];
+    if (command != nullptr && strcmp(command, "poll") == 0)
     {
       // Create a JSON document
       JsonDocument data;
@@ -117,21 +124,14 @@ void loop()
       serializeJson(data, Serial);
       Serial.println();
     }
-    else if(message["command"] == "throttle")
-    {
-      // Set the maxThrottle value
-      if(message["value"] != NULL)
-      {
-        maxThrottle = message["value"];
-      }
-    }
-    else if(message["command"] == "reset")
+    else if(command != nullptr && strcmp(command, "reset") == 0)
     {
       // Reset the arduino as if it were powercycled
       wdt_enable(WDTO_15MS);  // Enable watchdog timer with 15ms timeout
       while(1) {}             // Wait for watchdog to reset the system
     }
   }
+  //delay(100); // Small delay to avoid overwhelming the serial communication
 }
 
 

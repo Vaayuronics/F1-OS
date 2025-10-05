@@ -11,7 +11,9 @@ music = []
 f1_v10 = {}
 porche = {}
 horn = None
+track = 0
 curtime = 0.0
+curmusictime = 0.0
 maxed = False
 idled = False
 notifications = {}
@@ -82,15 +84,37 @@ def play_horn():
     '''Play the horn sound.'''
     engineer.play_chunk(horn)
 
-def play_audio(accel: bool, speed: float, engine_vol: int = 100, music_vol: int = 100):
+def play_engine(accel: bool, speed: float, engine_vol: int = 100):
     '''Play engine sound based on acceleration and speed.'''
     engineer.set_volume(engine_vol / 100.0) # Scale 0-100 to 0.0-1.0
-    musicer.set_volume(music_vol / 100.0) # Scale 0-100 to 0.0-1.0
     if porche:
         pass #TODO: Implement porche audio logic
     else:
         play_f1_audio(accel, speed)
-    #TODO: Implement music playback logic
+
+def change_track(new_track: int):
+    '''Change the current music track.'''
+    global track, curmusictime
+    if new_track != track:
+        new_track = new_track % TRACKS # Wrap around if out of bounds
+        track = new_track
+        curmusictime = 0.0 # Reset music time to start of new track
+
+def current_track() -> int:
+    '''Return the current music track number.'''
+    return track
+
+def play_music(music_vol: int = 100):
+    '''Play music track based on track number.'''
+    global TRACKS, curmusictime
+    musicer.set_volume(music_vol / 100.0) # Scale 0-100 to 0.0-1.0
+    chunk = EngineAudioPlayer.transform_audio(music[track], curmusictime, musicer.get_chunk_duration(), 1.0)
+    if chunk is None:
+        curmusictime = 0.0
+        change_track(track+1) # Move to next track if current is done
+        chunk = EngineAudioPlayer.transform_audio(music[track], curmusictime, musicer.get_chunk_duration(), 1.0)
+    musicer.play_chunk(chunk)
+    curmusictime += musicer.get_chunk_duration()
 
 def play_f1_audio(accel: bool, speed: float):
     '''Play F1 engine sound based on acceleration and speed.'''
