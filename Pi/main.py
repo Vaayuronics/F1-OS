@@ -104,7 +104,7 @@ def telemetry_update_loop():
                 print(f"[telemetry_update_loop] Sending RPM to dashboard: {data['RPM']}")
             dashboard.set_data_thread_safe(data)
         
-        time.sleep(dash.REFRESH_RATE)  # Update at ~58Hz to match display refresh rate
+        time.sleep(0.5)  # Too fast freezes the UI
 
 def hardware_update_loop():
     """Continuously poll hardware devices"""
