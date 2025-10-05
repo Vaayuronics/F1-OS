@@ -240,12 +240,12 @@ def process_data(pico_data, arduino_data):
                         '''User button inputs'''
                         if 'buttons' in pico_data:
                             buttons = pico_data['buttons']
-                            if 'Shift Emulation Toggle' in buttons and buttons['Shift Emulation Toggle'].get('pressed', True):
+                            if 'Shift Emulation Toggle' in buttons and buttons['Shift Emulation Toggle']:
                                 ui_data['Alert Title'] = f"Shift Emulation {'ON' if not persist_data['Shift Emulation'] else 'OFF'}"
                                 ui_data['Alert Message'] = "Shift emulation mode has been toggled."
                                 ui_data['Shift Emulation'] = not persist_data['Shift Emulation']
                                 persist_data['Shift Emulation'] = ui_data['Shift Emulation']
-                            if 'Headlights' in buttons and buttons['Headlights'].get('pressed', True):
+                            if 'Headlights' in buttons and buttons['Headlights']:
                                 ui_data['Alert Title'] = f"Headlights {'ON' if not persist_data['Headlights'] else 'OFF'}"
                                 ui_data['Alert Message'] = "Headlights and backlights are toggled."
                                 if ui_data['Headlights']:
@@ -253,7 +253,7 @@ def process_data(pico_data, arduino_data):
                                 else:
                                     hardware_data['Lights'] = "Off"
                                 persist_data['Headlights'] = not persist_data['Headlights']
-                            if 'Hazards' in buttons and buttons['Hazards'].get('pressed', True):
+                            if 'Hazards' in buttons and buttons['Hazards']:
                                 ui_data['Alert Title'] = f"Hazards {'ON' if not persist_data['Hazards'] else 'OFF'}"
                                 ui_data['Alert Message'] = "All lights are flashing is toggled."
                                 if ui_data['Hazards']:
@@ -261,19 +261,19 @@ def process_data(pico_data, arduino_data):
                                 elif not hardware_data.get('Lights', "Off") == "Headlights":
                                     hardware_data['Lights'] = "Off"
                                 persist_data['Hazards'] = not persist_data['Hazards']
-                            if 'Change Engine' in buttons and buttons['Change Engine'].get('pressed', True):
+                            if 'Change Engine' in buttons and buttons['Change Engine']:
                                 sound_data['Porche'] = not persist_data['Porche'] # Toggle between two modes
                                 ui_data['Alert Title'] = "Engine Changed"
                                 ui_data['Alert Message'] = f"Engine mode changed to {'Porche' if sound_data['Porche'] else 'F1 v10'}."
                                 persist_data['Porche'] = sound_data['Porche']
-                            if 'Change Music' in buttons and buttons['Change Music'].get('pressed', True):
+                            if 'Change Music' in buttons and buttons['Change Music']:
                                 sound_data["Change Track"] = True
-                            if 'DRS' in buttons and buttons['DRS'].get('pressed', True):
+                            if 'DRS' in buttons and buttons['DRS']:
                                 ui_data['Alert Title'] = f"DRS {'ON' if not persist_data['drs'] else 'OFF'}"
                                 ui_data['Alert Message'] = "Drag Reduction System has been toggled."
                                 hardware_data['DRS'] = not persist_data['DRS']
                                 persist_data['DRS'] = not persist_data['DRS']
-                            if 'Start' in buttons and buttons['Start'].get('pressed', True):
+                            if 'Start' in buttons and buttons['Start']:
                                 if persist_data['Started'] == False:
                                     sound_data['Start'] = True  # Momentary start sound
                                     ui_data['Alert Title'] = "Car Started"
@@ -282,19 +282,19 @@ def process_data(pico_data, arduino_data):
                                 else:
                                     #TODO: Implement launch control
                                     sound_data['Launch'] = True #Lauch control sound while pressed
-                            if 'Stop' in buttons and buttons['Stop'].get('pressed', True):
+                            if 'Stop' in buttons and buttons['Stop']:
                                 #TODO: Still need to implement hardware stop on throttle wire with switch
                                 ui_data['Alert Title'] = "Car Stopped"
                                 ui_data['Alert Message'] = "Car has been turned off."
                                 persist_data['Started'] = False
                                 hardware_data['STOP'] = True 
-                            if 'Play/Pause' in buttons and buttons['Play/Pause'].get('pressed', True):
+                            if 'Play/Pause' in buttons and buttons['Play/Pause']:
                                 persist_data['Pause'] = not persist_data['Pause']
                             if 'Auto Turn Signal Toggle' in buttons and buttons['Auto Turn Signal Toggle'].get('pressed', True):
                                 ui_data['Alert Title'] = f"Auto Turn Signal {'ON' if not persist_data['Auto Turn Signal'] else 'OFF'}"
                                 ui_data['Alert Message'] = "Auto turn signal has been toggled."
                                 persist_data['Auto Turn Signal'] = not persist_data['Auto Turn Signal']
-                            if 'Horn' in buttons and buttons['Horn'].get('pressed', True):
+                            if 'Horn' in buttons and buttons['Horn']:
                                 sound_data['Horn'] = True  # Momentary horn sound
                         if 'knobs' in pico_data:
                             knobs = pico_data['knobs']

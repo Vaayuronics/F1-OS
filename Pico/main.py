@@ -81,8 +81,7 @@ def process_command(command: dict) -> None:
             'buttons': {b.get_name(): b.get_state() for b in buttons},
             'knobs': {k.get_name(): {"count": k.get_count(), "switch": k.get_switch()} for k in knobs}
         }
-        # Send response as JSON
-        print(json.dumps(state))   
+        print(json.dumps(state))
     elif command.get("command") == "stop":
         save_angles()
         print(json.dumps({"status": "stopping"}))
@@ -92,6 +91,7 @@ def process_command(command: dict) -> None:
         print(json.dumps({"status": "tared"}))
     else:
         print(json.dumps({"status": "unknown command"}))
+    print()
 
 def heartbeat():
     global last_led_toggle
@@ -122,10 +122,9 @@ if __name__ == "__main__":
     angles = load_saved_angles()
     gyro.tare_gyro(angles)
     
-    print("Ready to receive commands")
-    
     # Setup polling for stdin
     poller.register(sys.stdin, select.POLLIN)
     
+    print()
     while True:
         loop()
