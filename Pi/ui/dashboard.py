@@ -132,8 +132,6 @@ class PopupNotification(QWidget):
 
 class F1Dashboard(QMainWindow):
     """Main dashboard window that displays gauges and car visualization."""
-    # Signal to receive data dicts from worker threads safely (queued connection)
-    data_signal = Signal(dict)
     
     def __init__(self, settings_file_path: str = None, model_path: str = None):
         """Initialize the dashboard with all widgets and layouts.""" 
@@ -337,8 +335,10 @@ class F1Dashboard(QMainWindow):
         self._setup_window_geometry()
         self._connect_geometry_events()
         
-    # Connect signal for immediate cross-thread UI updates
-        self.data_signal.connect(self._apply_data_dict)
+        # Set up data pull timer (20Hz refresh rate)
+        self.data_timer = QTimer()
+        self.data_timer.timeout.connect(self._pull_and_apply_data)
+        self.data_timer.start(50)  # 50ms = 20Hz
         
         # Initialize startup animation variables
         self.startup_animation_active = False
@@ -373,12 +373,26 @@ class F1Dashboard(QMainWindow):
             )
         return self.app.exec()
     
-    def set_data_thread_safe(self, data_dict):
-        """Thread-safe method to update dashboard data from external threads.
-
-        Immediately emit a signal so updates are applied on the UI thread.
-        """
-        self.data_signal.emit(dict(data_dict))
+    def set_data_source(self, data_getter_func):
+        """Set a function that returns the latest data dict."""
+        self.external_data_source = data_getter_func
+    
+    def set_interrupted_event(self, event):
+        """Set the threading.Event that signals shutdown."""
+        self._interrupted_event = event
+    
+    def _pull_and_apply_data(self):
+        """Pull data from external source and apply it (runs on UI thread via QTimer)."""
+        if self.external_data_source:
+            try:
+                data = self.external_data_source()
+                if data:
+                    self._apply_data_dict(data)
+            except RuntimeError:
+                # Dashboard is being deleted, stop timer
+                self.data_timer.stop()
+            except Exception as e:
+                print(f"[Dashboard] Error pulling data: {e}")
     
     def _apply_data_dict(self, data: dict):
         """Apply telemetry data to widgets. Must run on the UI thread."""

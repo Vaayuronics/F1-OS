@@ -62,100 +62,99 @@ def signal_handler(signum, frame):
 # Set up signal handler for graceful shutdown
 signal.signal(signal.SIGINT, signal_handler)
 
-def light_loop():
-    """Continuously update lights based on UI data"""
-    global interrupted, ui_data, ui_data_ready, ui_data_lock
-    # First time light bootup animation
-    lights_boot_anim()
-    # Should be off now
-    while not interrupted.is_set():
-        data = None
-        with ui_data_lock:
-            if ui_data_ready and ui_data:
-                data = copy.deepcopy(ui_data)
-        
-        if data:
-            rpm = data.get('RPM', 0)
-            lights_count = len(lights.lights)
-            rpm_per_light = dash.MAX_RPM / lights_count
+def update_rpm_lights(rpm):
+    """Update lights based on RPM value."""
+    global lights
+    lights_count = len(lights.lights)
+    rpm_per_light = dash.MAX_RPM / lights_count
+    
+    for i in range(lights_count):
+        if rpm >= i * rpm_per_light:
+            lights.turn_on(i)
+        else:
+            lights.turn_off(i)
             
-            for i in range(lights_count):
-                if rpm >= i * rpm_per_light:
-                    lights.turn_on(i)
-                else:
-                    lights.turn_off(i)
-                    
-            if rpm > dash.MAX_RPM:
-                lights.toggle(lights_count - 1)  # Flash the last light if over max RPM
-        
-        time.sleep(0.1)  # Adjust light update frequency as needed
+    if rpm > dash.MAX_RPM:
+        lights.toggle(lights_count - 1)  # Flash the last light if over max RPM
 
-def telemetry_update_loop():
-    """Continuously update telemetry data"""
-    global interrupted, ui_data, ui_data_ready, ui_data_lock
-    while not interrupted.is_set():
-        data = None
-        with ui_data_lock:
-            if ui_data_ready and ui_data:
-                data = copy.deepcopy(ui_data)
-        
-        if data:
-            if 'RPM' in data:
-                print(f"[telemetry_update_loop] Sending RPM to dashboard: {data['RPM']}")
-            dashboard.set_data_thread_safe(data)
-        
-        time.sleep(0.5)  # Too fast freezes the UI
+def get_ui_data():
+    """Get a copy of the current UI data (called by dashboard timer)."""
+    global ui_data, ui_data_ready, ui_data_lock
+    with ui_data_lock:
+        if ui_data_ready and ui_data:
+            return copy.deepcopy(ui_data)
+    return None
 
 def hardware_update_loop():
     """Continuously poll hardware devices"""
     global interrupted, pico, arduino
     while not interrupted.is_set():
-        start = time.time()
-        pico_data = pico.poll()
-        print(f"Pico poll time: {time.time() - start:.3f}s")
-        arduino_start = time.time()
-        arduino_data = arduino.poll()
-        print(f"Arduino poll time: {time.time() - arduino_start:.3f}s")
-        # would be better if done seperatly but its more efficient if done together
-        print(f"Pico Data: {pico_data}")
-        print(f"Arduino Data: {arduino_data}")
-        process_start = time.time()
-        process_data(pico_data, arduino_data)
-        print(f"Process data time: {time.time() - process_start:.3f}s")
-        print(f"Hardware poll and process time: {time.time() - start:.3f}s")
-        time.sleep(0.1)  # Polling interval (Needed to guarantee other threads run)
+        try:
+            pico_data = pico.poll()
+            arduino_data = arduino.poll()
+            process_data(pico_data, arduino_data)
+            time.sleep(0.05)  # Polling interval
+        except Exception as e:
+            print(f"[hardware_update_loop] Error: {e}")
+            if interrupted.is_set():
+                break
+    
+    print("[hardware_update_loop] Thread exiting")
 
 def hardware_loop():
-    '''Complete operations on hardware data'''
+    '''Complete operations on hardware data and update RPM lights'''
     global interrupted, hardware_data, hardware_data_ready, hardware_data_lock
+    global ui_data, ui_data_ready, ui_data_lock
+
+    lights_boot_anim()
+    
     while not interrupted.is_set():
-        data = None
-        with hardware_data_lock:
-            if hardware_data_ready and hardware_data:
-                data = copy.deepcopy(hardware_data)
-        
-        if data:
-            #TODO: Process hardware data
-            # Check persistent flags in data for operations
-            if data.get('Lights') == 'Headlights':
-                # Turn on headlights
-                pass
-            elif data.get('Lights') == 'Hazards':
-                # Flash all lights
-                pass
-            elif data.get('Lights') == 'Off':
-                # Turn off lights
-                pass
+        try:
+            data = None
+            rpm = 0
             
-            if data.get('DRS', False):
-                # Activate DRS
-                pass
+            # Get hardware data
+            with hardware_data_lock:
+                if hardware_data_ready and hardware_data:
+                    data = copy.deepcopy(hardware_data)
             
-            if data.get('STOP', False):
-                # Emergency stop throttle
-                pass
-        
-        time.sleep(0.05)
+            # Get RPM from ui_data for lights
+            with ui_data_lock:
+                if ui_data_ready and ui_data:
+                    rpm = ui_data.get('RPM', 0)
+            
+            # Update RPM lights
+            if rpm > 0:
+                update_rpm_lights(rpm)
+            
+            if data:
+                #TODO: Process hardware data
+                # Check persistent flags in data for operations
+                if data.get('Lights') == 'Headlights':
+                    # Turn on headlights
+                    pass
+                elif data.get('Lights') == 'Hazards':
+                    # Flash all lights
+                    pass
+                elif data.get('Lights') == 'Off':
+                    # Turn off lights
+                    pass
+                
+                if data.get('DRS', False):
+                    # Activate DRS
+                    pass
+                
+                if data.get('STOP', False):
+                    # Emergency stop throttle
+                    pass
+            
+            time.sleep(0.05)
+        except Exception as e:
+            print(f"[hardware_loop] Error: {e}")
+            if interrupted.is_set():
+                break
+    
+    print("[hardware_loop] Thread exiting")
 
 def audio_loop():
     '''Play the sounds chunks and return '''
@@ -163,30 +162,37 @@ def audio_loop():
     sound.load_tracks()
     sound.play_startup_sound()
     while not interrupted.is_set():
-        data = None
-        with sound_data_lock:
-            if sound_data_ready and sound_data:
-                data = copy.deepcopy(sound_data)
-        
-        if data:
-            if data.get('Start', False):
-                sound.play_f1_start()
-            if data.get('Horn', False):
-                sound.play_horn()
-            if 'Porche' in data:
-                sound.set_porche_mode(data['Porche'])
-            if data.get('Change Track', False):
-                sound.change_track(sound.current_track() + 1)
-            #TODO: Implement Launch sound
-            if data.get('Launch', False):
-                pass  # Launch control sound
+        try:
+            data = None
+            with sound_data_lock:
+                if sound_data_ready and sound_data:
+                    data = copy.deepcopy(sound_data)
             
-            if not data.get('Pause', False):
-                sound.play_music(data.get('Music Volume', 0))
+            if data:
+                if data.get('Start', False):
+                    sound.play_f1_start()
+                if data.get('Horn', False):
+                    sound.play_horn()
+                if 'Porche' in data:
+                    sound.set_porche_mode(data['Porche'])
+                if data.get('Change Track', False):
+                    sound.change_track(sound.current_track() + 1)
+                #TODO: Implement Launch sound
+                if data.get('Launch', False):
+                    pass  # Launch control sound
+                
+                if not data.get('Pause', False):
+                    sound.play_music(data.get('Music Volume', 0))
+                
+                sound.play_engine(data.get('Accel', False), data.get('Speed', 0), data.get('Engine Volume', 0))
             
-            sound.play_engine(data.get('Accel', False), data.get('Speed', 0), data.get('Engine Volume', 0))
-        
-        time.sleep(0.1)  # Polling interval
+            time.sleep(0.1)  # Polling interval
+        except Exception as e:
+            print(f"[audio_loop] Error: {e}")
+            if interrupted.is_set():
+                break
+    
+    print("[audio_loop] Thread exiting")
 
 def calc_speed_rpm(throttle: float, speed: float, gear: int, prev_speed: float = 0, prev_time: float = 0, engine_speed : float = 0, motor_rpm: int = 0) -> tuple[bool, float, float]:
     '''Simple RPM calculation based on throttle and speed.'''
@@ -418,20 +424,6 @@ def process_data(pico_data, arduino_data):
             sound_data.update(new_sound_data)
             sound_data_ready = True
 
-def start_dashboard():
-    """Start the dashboard UI in the main thread."""
-    global dashboard
-
-    dashboard = dash.F1Dashboard("ui/dashboard_settings.ini", "ui/model.fbx")
-    
-    dashboard.enable_fullscreen()
-    exit_code = dashboard.run()
-    while exit_code != 0:
-        print("Application exited with code:", exit_code, "restarting...")
-        exit_code = dashboard.run()
-    print("Application finished with exit code:", exit_code)
-    sys.exit(exit_code)
-
 def lights_boot_anim():
     time.sleep(3)
     for i in range(len(lights)):
@@ -445,17 +437,19 @@ def lights_boot_anim():
 def boot():
     print("Booting up system.")
 
-    global pico, arduino
+    global pico, arduino, dashboard
 
     pico = JSONSerialReader("/dev/pico")
     arduino = JSONSerialReader("/dev/arduino")
 
-    lighting_thread = threading.Thread(target=light_loop, daemon=True)
-    lighting_thread.start()
+    # Create dashboard first
+    dashboard = dash.F1Dashboard("ui/dashboard_settings.ini", "ui/model.fbx")
+    
+    # Give dashboard access to data and shutdown event
+    dashboard.set_data_source(get_ui_data)
+    dashboard.set_interrupted_event(interrupted)
 
-    telemetry_thread = threading.Thread(target=telemetry_update_loop, daemon=True)
-    telemetry_thread.start()
-
+    # Start hardware threads (no lighting or telemetry threads needed)
     hardware_update_thread = threading.Thread(target=hardware_update_loop, daemon=True)
     hardware_update_thread.start()
 
@@ -465,7 +459,19 @@ def boot():
     audio_thread = threading.Thread(target=audio_loop, daemon=True)
     audio_thread.start()
 
-    start_dashboard()
+    # Start dashboard (blocks until window closes)
+    dashboard.enable_fullscreen()
+    exit_code = dashboard.run()
+    
+    # After dashboard closes, ensure threads stop
+    print("[Main] Dashboard closed, setting interrupted flag...")
+    interrupted.set()
+    
+    # Wait for threads to finish
+    time.sleep(0.5)
+    
+    print(f"Application finished with exit code: {exit_code}")
+    sys.exit(exit_code)
 
 if __name__ == "__main__":
     boot()
