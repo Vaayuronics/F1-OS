@@ -101,13 +101,11 @@ def hardware_update_loop():
     """Continuously poll hardware devices"""
     global interrupted, pico, arduino
     while not interrupted.is_set():
-        start = time.time()
         pico_data = pico.poll()
         arduino_data = arduino.poll()
+        print(f"Pico: {pico_data}\nArduino: {arduino_data}")
         # would be better if done seperatly but its more efficient if done together
         process_data(pico_data, arduino_data)
-        # Should occur ever 100 ms, if processing took less time, sleep the remainder
-        time.sleep(max(0, 0.1 - (time.time() - start)))
 
 def hardware_loop():
     '''Complete operations on hardware data'''
