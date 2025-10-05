@@ -115,10 +115,10 @@ void loop()
       JsonDocument data;
 
       // Add data to the document
-      data["throttle"] = throttleAngle;
-      data["brake"] = brakeAngle; // If brake angle is max then set throttle to 0 in main code? Cant do burn out tho :(
-      data["speed"] = speed;
-      data["status"] = "polled";
+      data["Throttle"] = throttleAngle;
+      data["Brake"] = brakeAngle; // If brake angle is max then set throttle to 0 in main code? Cant do burn out tho :(
+      data["Speed"] = speed;
+      data["Status"] = "Polled";
 
       // Serialize the document to a string and send it over Serial
       serializeJson(data, Serial);

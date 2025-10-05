@@ -426,6 +426,13 @@ class F1Dashboard(QMainWindow):
         if 'Music Volume' in data:
             self.setMusicVolume(data['Music Volume'])
             data.pop('Music Volume')
+        if 'Alert Title' in data:
+            alert_title = data['Alert Title']
+            alert_text = data['Alert Message'] if 'Alert Message' in data else ""
+            self.show_notification(alert_title, alert_text, 3000)
+            data.pop('Alert Title')
+            if 'Alert Message' in data:
+                data.pop('Alert Message')
 
         # Update telemetry display with remaining fields
         display_data = {k: v for k, v in data.items()}

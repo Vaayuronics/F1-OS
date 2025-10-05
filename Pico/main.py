@@ -76,10 +76,10 @@ def process_command(command: dict) -> None:
     elif command.get("command") == "poll":
         # Create state object
         state = {
-            'status': 'polled',
-            'gyro': gyro.get_angles(),
-            'buttons': {b.get_name(): b.get_state() for b in buttons},
-            'knobs': {k.get_name(): {"count": k.get_count(), "switch": k.get_switch()} for k in knobs}
+            'Status': 'Polled',
+            'Gyro': gyro.get_angles(),
+            'Buttons': {b.get_name(): b.get_state() for b in buttons},
+            'Knobs': {k.get_name(): {"Count": k.get_count(), "Switch": k.get_switch()} for k in knobs}
         }
         print(json.dumps(state))
     elif command.get("command") == "stop":

@@ -103,7 +103,6 @@ def hardware_update_loop():
     while not interrupted.is_set():
         pico_data = pico.poll()
         arduino_data = arduino.poll()
-        print(f"Pico: {pico_data}\nArduino: {arduino_data}")
         # would be better if done seperatly but its more efficient if done together
         process_data(pico_data, arduino_data)
 
@@ -152,7 +151,7 @@ def audio_loop():
         sound.play_engine(data.get('Accel'), data.get('Speed', 0), data.get('Engine Volume', 0))
         time.sleep(0.1)  # Polling interval
 
-def calc_speed_rpm(throttle: float, speed: float, gear: int, engine_speed : float, motor_rpm: int) -> tuple[bool, float, float]:
+def calc_speed_rpm(throttle: float, speed: float, gear: int, engine_speed : float = 0, motor_rpm: int = 0) -> tuple[bool, float, float]:
     '''Simple RPM calculation based on throttle and speed.'''
     global persist_data
     accel = False
@@ -167,43 +166,6 @@ def calc_speed_rpm(throttle: float, speed: float, gear: int, engine_speed : floa
 
     if gear == 0:
         rpm = throttle * 103.7
-
-        # Throttle goes from 0-135, 25% throttle is 1x speed, make
-        # equation that does this up to 3x speed at 100% throttle
-        # Map throttle (0-135) to playback speed multiplier for engine sounds.
-        # New behavior (logarithmic feel):
-        # - Below 25% throttle playback slows down logarithmically (gives a
-        #   'heavy' low-throttle feel).
-        # - At 25% throttle we return to baseline 1.0 playback.
-        # - From 25% to 100% we smoothly increase up to 3.0 using a small log-based
-        #   curve to keep responsiveness but with diminishing returns.
-        # Implementation approach:
-        # - Compute throttle_pct in [0,1].
-        # - For throttle_pct <= 0.25 use a logarithmic decay below 1.0:
-        #     play_speed = 1.0 - A * log10(1 + B * (0.25 - throttle_pct))
-        #   so speed falls as throttle decreases.
-        # - For throttle_pct > 0.25, map to [1.0, 3.0] using a gentle log curve:
-        #     play_speed = 1.0 + (3.0 - 1.0) * (log(1 + C * (throttle_pct - 0.25)) / log(1 + C * 0.75))
-        #   which normalizes the log output so throttle_pct=1.0 => play_speed=3.0.
-        max_throttle = 135.0
-        throttle_pct = max(0.0, min(throttle / max_throttle, 1.0))
-
-        if throttle_pct <= 0.25:
-            # Parameters tuned for a pleasant slow-down feel under 25%.
-            A = 0.22
-            B = 18.0
-            # use log10 because it's shallower near zero; add 1 to keep argument >0
-            play_speed = 1.0 - A * math.log10(1.0 + B * (0.25 - throttle_pct))
-            # clamp lower bound so playback doesn't become negative
-            play_speed = max(play_speed, 0.5)
-        else:
-            # For the upper region (25%..100%) use a normalized natural-log curve
-            C = 6.0
-            numerator = math.log(1.0 + C * (throttle_pct - 0.25))
-            denominator = math.log(1.0 + C * 0.75)
-            frac = numerator / denominator if denominator != 0 else 1.0
-            play_speed = 1.0 + (3.0 - 1.0) * frac
-            play_speed = min(max(play_speed, 1.0), 3.0)
 
     if speed >= persist_data['Prev Speed']:
         accel = True
@@ -238,7 +200,7 @@ def process_data(pico_data, arduino_data):
                     #Always replace ui data, dont wait for consumption!!
                     if pico_data:
                         '''User button inputs'''
-                        if 'buttons' in pico_data:
+                        if 'Buttons' in pico_data:
                             buttons = pico_data['buttons']
                             if 'Shift Emulation Toggle' in buttons and buttons['Shift Emulation Toggle']:
                                 ui_data['Alert Title'] = f"Shift Emulation {'ON' if not persist_data['Shift Emulation'] else 'OFF'}"
@@ -296,36 +258,38 @@ def process_data(pico_data, arduino_data):
                                 persist_data['Auto Turn Signal'] = not persist_data['Auto Turn Signal']
                             if 'Horn' in buttons and buttons['Horn']:
                                 sound_data['Horn'] = True  # Momentary horn sound
-                        if 'knobs' in pico_data:
-                            knobs = pico_data['knobs']
+                        if 'Knobs' in pico_data:
+                            knobs = pico_data['Knobs']
                             if 'Engine Vol' in knobs:
-                                if knobs['Engine Vol'].get('switch', False):
+                                if knobs['Engine Vol'].get('Switch', False):
                                     persist_data['Engine Mute'] = not persist_data['Engine Mute']
                                 if persist_data['Engine Mute']:
                                     sound_data['Engine Volume'] = 0
+                                    ui_data['Engine Volume'] = 0
                                 else:
-                                    sound_data['Engine Volume'] = max(min(knobs['Engine Vol'].get('count', 0), 100), 0)  #clamped 0-100
+                                    sound_data['Engine Volume'] = max(min(knobs['Engine Vol'].get('Count', 0), 100), 0)  #clamped 0-100
+                                    ui_data['Engine Volume'] = sound_data['Engine Volume']
                             if 'Music Vol' in knobs:
-                                if knobs['Music Vol'].get('switch', False):
+                                if knobs['Music Vol'].get('Switch', False):
                                     persist_data['Music Mute'] = not persist_data['Music Mute']
                                 if persist_data['Music Mute']:
                                     sound_data['Music Volume'] = 0
+                                    ui_data['Music Volume'] = 0
                                 else:
-                                    sound_data['Music Volume'] = max(min(knobs['Music Vol'].get('count', 0), 100), 0)  #clamped 0-100
+                                    sound_data['Music Volume'] = max(min(knobs['Music Vol'].get('Count', 0), 100), 0)  #clamped 0-100
+                                    ui_data['Music Volume'] = sound_data['Music Volume']
                             if 'Engine Tune' in knobs:
-                                if knobs['Engine Tune'].get('switch', False):
+                                if knobs['Engine Tune'].get('Switch', False):
                                     ui_data['Mode Switch'] = True
                                 else:
-                                    ui_data['Engine Tune'] = max(min(knobs['Engine Tune'].get('count', 0), 100), 0)  # 0-100
+                                    ui_data['Engine Tune'] = max(min(knobs['Engine Tune'].get('Count', 0), 100), 0)  # 0-100
                                     persist_data['Tune'] = ui_data['Engine Tune']
 
                     if arduino_data:
-                        if 'Throttle' in arduino_data and 'Speed' in arduino_data and 'Engine Speed' in arduino_data and 'Engine RPM' in arduino_data and 'Brake' in arduino_data:
-                            accel, speed, rpm = calc_speed_rpm(arduino_data.get('Throttle', 0), arduino_data.get('Speed', 0), cur_gear, arduino_data.get('Engine Speed', 0), arduino_data.get('Engine RPM', 0))
+                        if 'Throttle' in arduino_data and 'Speed' in arduino_data and 'Brake' in arduino_data:
+                            accel, speed, rpm = calc_speed_rpm(arduino_data.get('Throttle', 0), arduino_data.get('Speed', 0), cur_gear)
                             sound_data['Accel'] = accel
                             ui_data['RPM'] = rpm
-                            ui_data['Engine RPM'] = arduino_data['Engine RPM']
-                            ui_data['Engine Speed'] = arduino_data['Engine Speed']
                             ui_data['Speed'] = arduino_data['Speed']
                             ui_data['Throttle'] = arduino_data['Throttle']
                             hardware_data['Brake'] = arduino_data['Brake']
