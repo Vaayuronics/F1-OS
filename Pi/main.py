@@ -115,15 +115,11 @@ def hardware_loop():
             data = None
             
             # Get hardware data
-            print("[hardware_loop] Waiting for lock")
             with hardware_data_lock:
-                print("[hardware_loop] Acquired lock")
                 if hardware_data_ready and hardware_data:
                     data = hardware_data.copy()
 
-            print("[hardware_loop] Released lock and updating lights")
             # Update RPM lights
-            print(f"[hardware_loop] {data.get('RPM', 0)}")
             update_rpm_lights(data.get('RPM', 0))
             
             if data:
