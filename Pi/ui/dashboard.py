@@ -335,10 +335,10 @@ class F1Dashboard(QMainWindow):
         self._setup_window_geometry()
         self._connect_geometry_events()
         
-        # Set up data pull timer (20Hz refresh rate)
+        # Set up data pull timer (20Hz refresh rate) but DON'T start it yet
         self.data_timer = QTimer()
         self.data_timer.timeout.connect(self._pull_and_apply_data)
-        self.data_timer.start(50)  # 50ms = 20Hz
+        # Timer will be started in run() after window is shown
         
         # Initialize startup animation variables
         self.startup_animation_active = False
@@ -359,6 +359,7 @@ class F1Dashboard(QMainWindow):
     def run(self):
         """Show the dashboard and run the application."""
         self.show()
+        
         # Start the startup animation after showing
         self.start_startup_animation()
         # Show model fallback notification if needed
@@ -1025,6 +1026,10 @@ class F1Dashboard(QMainWindow):
         self.setSpeed(0.0)
         
         print("Startup animation complete!")
+
+        # INFO: TIMER STARTED HERE
+        # Start data timer AFTER window is shown and ready
+        self.data_timer.start(100)  # 100ms = 10Hz
     
     def is_animation_active(self):
         """Check if startup animation is currently running."""

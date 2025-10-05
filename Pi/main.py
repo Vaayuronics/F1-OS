@@ -26,19 +26,14 @@ dashboard = None
 
 MAX_THROTTLE_DEG = 135
 
-# Better synchronization with locks and ready flags
+# Better synchronization with locks
 ui_data_lock = threading.Lock()
 hardware_data_lock = threading.Lock()
 sound_data_lock = threading.Lock()
 
 ui_data = {}
-ui_data_ready = False
-
 sound_data = {}
-sound_data_ready = False
-
 hardware_data = {}
-hardware_data_ready = False
 
 interrupted = threading.Event()
 
@@ -81,9 +76,11 @@ def update_rpm_lights(rpm):
 
 def get_ui_data():
     """Get a copy of the current UI data (called by dashboard timer)."""
-    global ui_data, ui_data_ready, ui_data_lock
+    global ui_data, ui_data_lock
     with ui_data_lock:
-        if ui_data_ready and ui_data:
+        if ui_data:
+            # Shallow copy is safe for dicts with immutable values (ints, strings, bools)
+            # If we had nested dicts/lists, we'd need deepcopy
             return ui_data.copy()
     return None
 
@@ -105,8 +102,7 @@ def hardware_update_loop():
 
 def hardware_loop():
     '''Complete operations on hardware data and update RPM lights'''
-    global interrupted, hardware_data, hardware_data_ready, hardware_data_lock
-    global ui_data, ui_data_ready, ui_data_lock
+    global interrupted, hardware_data, hardware_data_lock
 
     lights_boot_anim()
     
@@ -116,7 +112,7 @@ def hardware_loop():
             
             # Get hardware data
             with hardware_data_lock:
-                if hardware_data_ready and hardware_data:
+                if hardware_data:
                     data = hardware_data.copy()
 
             # Update RPM lights
@@ -153,14 +149,14 @@ def hardware_loop():
 
 def audio_loop():
     '''Play the sounds chunks and return '''
-    global interrupted, sound_data, sound_data_ready, sound_data_lock
+    global interrupted, sound_data, sound_data_lock
     sound.load_tracks()
     sound.play_startup_sound()
     while not interrupted.is_set():
         try:
             data = None
             with sound_data_lock:
-                if sound_data_ready and sound_data:
+                if sound_data:
                     data = sound_data.copy()
             
             if data:
@@ -406,17 +402,14 @@ def process_data(pico_data, arduino_data):
     if new_ui_data:
         with ui_data_lock:
             ui_data.update(new_ui_data)
-            ui_data_ready = True
     
     if new_hardware_data:
         with hardware_data_lock:
             hardware_data.update(new_hardware_data)
-            hardware_data_ready = True
     
     if new_sound_data:
         with sound_data_lock:
             sound_data.update(new_sound_data)
-            sound_data_ready = True
 
 def lights_boot_anim():
     time.sleep(3)
