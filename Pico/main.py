@@ -71,7 +71,7 @@ def process_command(command: dict) -> None:
     """Process the command received from stdin"""
     if command.get("command") == "reset":
         save_angles()
-        print(json.dumps({'status': 'resetting'}))
+        sys.stdout.write(json.dumps({'status': 'resetting'}) + '\n')
         reset()
     elif command.get("command") == "poll":
         # Create state object
@@ -81,17 +81,16 @@ def process_command(command: dict) -> None:
             'Buttons': {b.get_name(): b.get_state() for b in buttons},
             'Knobs': {k.get_name(): {"Count": k.get_count(), "Switch": k.get_switch()} for k in knobs}
         }
-        print(json.dumps(state))
+        sys.stdout.write(json.dumps(state) + '\n')
     elif command.get("command") == "stop":
         save_angles()
-        print(json.dumps({"status": "stopping"}))
+        sys.stdout.write(json.dumps({"status": "stopping"}) + '\n')
         exit(0)
     elif command.get("command") == "tare":
         gyro.tare_gyro((0,0,0))
-        print(json.dumps({"status": "tared"}))
+        sys.stdout.write(json.dumps({"status": "tared"}) + '\n')
     else:
-        print(json.dumps({"status": "unknown command"}))
-    print()
+        sys.stdout.write(json.dumps({"status": "unknown command"}) + '\n')
 
 def heartbeat():
     global last_led_toggle
@@ -125,6 +124,5 @@ if __name__ == "__main__":
     # Setup polling for stdin
     poller.register(sys.stdin, select.POLLIN)
     
-    print()
     while True:
         loop()

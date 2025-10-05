@@ -122,7 +122,8 @@ void loop()
 
       // Serialize the document to a string and send it over Serial
       serializeJson(data, Serial);
-      Serial.println();
+      Serial.print('\n');  // Send newline immediately after JSON
+      Serial.flush();      // Force transmission
     }
     else if(command != nullptr && strcmp(command, "reset") == 0)
     {
