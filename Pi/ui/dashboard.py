@@ -11,7 +11,7 @@ import sys
 
 REFRESH_RATE = 1/58
 MAX_RPM = 14000 # Max RPM for the gauge, actual should go to about 14.5k
-
+prev_run = 0
 class PopupNotification(QWidget):
     """Square popup dialog for temporary notifications with title and subtitle."""
     
@@ -398,7 +398,6 @@ class F1Dashboard(QMainWindow):
     def _apply_data_dict(self, data: dict):
         """Apply telemetry data to widgets. Must run on the UI thread."""
         if 'RPM' in data:
-            print(f"[_apply_data_dict] Received RPM: {data['RPM']}")
             self.setRPM(data['RPM'])
             data.pop('RPM')
         if 'Speed' in data:
@@ -530,7 +529,6 @@ class F1Dashboard(QMainWindow):
     
     def setRPM(self, rpm):
         """Set the RPM gauge value."""
-        print(f"[setRPM] Setting RPM gauge to: {rpm}")
         self.rpm_gauge.setValue(rpm)
     
     def setSpeed(self, speed):
@@ -701,6 +699,9 @@ class F1Dashboard(QMainWindow):
     
     def updateTelemetryDisplay(self, data_dict):
         """Update the telemetry data space with custom information.""" 
+        import time
+        print(f"Time since last run: {time.time() - prev_run}")
+        prev_run = time.time()
         # Clear existing content
         for i in reversed(range(self.telemetry_content_layout.count())): 
             child = self.telemetry_content_layout.itemAt(i)
