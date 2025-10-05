@@ -264,6 +264,10 @@ class GaugeWidget(QWidget):
                 else:
                     # For values < 1000, show normally without leading zeros
                     center_text = str(rpm_value)  # No leading zeros
+                    # Use smaller font (40pt instead of 48pt) for 3-digit numbers
+                    small_font = painter.font()
+                    small_font.setPointSize(40)  # 8pt smaller than the standard 48pt
+                    painter.setFont(small_font)
                     painter.drawText(QRect(0, int(center_y - 50), self.width(), 70), 
                                     Qt.AlignCenter, center_text)
             else:
