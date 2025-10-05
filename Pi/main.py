@@ -107,7 +107,7 @@ def hardware_update_loop():
         # would be better if done seperatly but its more efficient if done together
         process_data(pico_data, arduino_data)
         # Should occur ever 100 ms, if processing took less time, sleep the remainder
-        time.sleep(min(0, 0.1 - (time.time() - start)))
+        time.sleep(max(0, 0.1 - (time.time() - start)))
 
 def hardware_loop():
     '''Complete operations on hardware data'''
