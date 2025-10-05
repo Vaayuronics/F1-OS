@@ -93,6 +93,7 @@ def telemetry_update_loop():
                 ui_data_cond.wait()
             data = ui_data
             ui_data_cond.notify(1)
+        print("Telemetry Updating...")
         if data:
             if 'RPM' in data:
                 print(f"[telemetry_update_loop] Sending RPM to dashboard: {data['RPM']}")
@@ -105,9 +106,14 @@ def hardware_update_loop():
     while not interrupted.is_set():
         start = time.time()
         pico_data = pico.poll()
+        print(f"Pico poll time: {time.time() - start:.3f}s")
+        arduino_start = time.time()
         arduino_data = arduino.poll()
+        print(f"Arduino poll time: {time.time() - arduino_start:.3f}s")
         # would be better if done seperatly but its more efficient if done together
+        process_start = time.time()
         process_data(pico_data, arduino_data)
+        print(f"Process data time: {time.time() - process_start:.3f}s")
         print(f"Hardware poll and process time: {time.time() - start:.3f}s")
 
 def hardware_loop():
@@ -301,7 +307,7 @@ def process_data(pico_data, arduino_data):
                             hardware_data['Throttle'] = arduino_data['Throttle']
                             persist_data['Prev Speed'] = speed
                             persist_data['Prev Time'] = time.time()
- 
+                            
                 sound_data_cond.notify_all()
             hardware_data_cond.notify_all()
         ui_data_cond.notify_all()
