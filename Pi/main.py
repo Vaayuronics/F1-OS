@@ -387,7 +387,6 @@ def process_data(pico_data, arduino_data):
     
     # Process arduino data
     if arduino_data:
-        print(f"Arduino Cond: {'Throttle' in arduino_data and 'Speed' in arduino_data and 'Brake' in arduino_data}")
         if 'Throttle' in arduino_data and 'Speed' in arduino_data and 'Brake' in arduino_data:
             accel, speed, rpm = calc_speed_rpm(
                 arduino_data.get('Throttle', 0),
