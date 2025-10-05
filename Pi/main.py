@@ -123,6 +123,7 @@ def hardware_loop():
 
             print("[hardware_loop] Released lock and updating lights")
             # Update RPM lights
+            print(f"[hardware_loop] {data.get('RPM', 0)}")
             update_rpm_lights(data.get('RPM', 0))
             
             if data:
@@ -434,7 +435,7 @@ def lights_boot_anim():
 def boot():
     print("Booting up system.")
 
-    global pico, arduino, dashboard
+    global pico, arduino, dashboard, lights
 
     pico = JSONSerialReader("/dev/pico")
     arduino = JSONSerialReader("/dev/arduino")
@@ -468,6 +469,7 @@ def boot():
     time.sleep(0.5)
     
     print(f"Application finished with exit code: {exit_code}")
+    lights.turn_off_all()
     sys.exit(exit_code)
 
 if __name__ == "__main__":
