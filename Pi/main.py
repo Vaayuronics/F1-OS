@@ -117,6 +117,8 @@ def hardware_update_loop():
         arduino_data = arduino.poll()
         print(f"Arduino poll time: {time.time() - arduino_start:.3f}s")
         # would be better if done seperatly but its more efficient if done together
+        print(f"Pico Data: {pico_data}")
+        print(f"Arduino Data: {arduino_data}")
         process_start = time.time()
         process_data(pico_data, arduino_data)
         print(f"Process data time: {time.time() - process_start:.3f}s")
