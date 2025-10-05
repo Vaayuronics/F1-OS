@@ -12,16 +12,23 @@ class JSONSerialReader:
         time.sleep(0.1)  # Allow time for buffer clearing
         
     def poll(self) -> dict:
-        if self.ser.in_waiting:  # Check if data is available
-            data = self.ser.readline()
-            if data:
-                try:
-                    self.latest_json = json.loads(data.decode().strip())
-                    return self.latest_json
-                except json.JSONDecodeError:
-                    pass
-                except Exception as e:
-                    print(f"Error reading: {e}")
+        while self.ser.in_waiting > 0:
+            self.ser.readline()  # Clear out any old data
+
+        self.send({"command": "poll"})
+
+        while self.ser.in_waiting == 0:
+            time.sleep(0.01)  # Wait for data to arrive
+
+        data = self.ser.readline()
+        if data:
+            try:
+                self.latest_json = json.loads(data.decode().strip())
+                return self.latest_json
+            except json.JSONDecodeError:
+                pass
+            except Exception as e:
+                print(f"Error reading: {e}")
         return None
 
     def get_latest(self):
