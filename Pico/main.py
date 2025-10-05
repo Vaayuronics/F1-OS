@@ -74,12 +74,12 @@ def process_command(command: dict) -> None:
         sys.stdout.write(json.dumps({'status': 'resetting'}) + '\n')
         reset()
     elif command.get("command") == "poll":
-        # Create state object
+        # Create state object with Down and Pressed states
         state = {
             'Status': 'Polled',
             'Gyro': gyro.get_angles(),
-            'Buttons': {b.get_name(): b.get_state() for b in buttons},
-            'Knobs': {k.get_name(): {"Count": k.get_count(), "Switch": k.get_switch()} for k in knobs}
+            'Buttons': {b.get_name(): {"Down": b.get_state(), "Pressed": b.was_pressed()} for b in buttons},
+            'Knobs': {k.get_name(): {"Count": k.get_count(), "Down": k.get_switch(), "Pressed": k.switch_was_pressed()} for k in knobs}
         }
         sys.stdout.write(json.dumps(state) + '\n')
     elif command.get("command") == "stop":

@@ -9,8 +9,11 @@ from ui.volume_gauge import VolumeGaugeWidget
 import os
 import sys
 
-REFRESH_RATE = 1/58
 MAX_RPM = 14000 # Max RPM for the gauge, actual should go to about 14.5k
+UPDATE_MS = 50  # Update interval in milliseconds (20Hz)
+
+#TODO: Debug the update telemetry to find out where the bottle neck is
+
 class PopupNotification(QWidget):
     """Square popup dialog for temporary notifications with title and subtitle."""
     
@@ -1101,7 +1104,7 @@ class F1Dashboard(QMainWindow):
 
         # INFO: TIMER STARTED HERE
         # Start data timer AFTER window is shown and ready
-        self.data_timer.start(100)  # 100ms = 10Hz
+        self.data_timer.start(UPDATE_MS)
     
     def is_animation_active(self):
         """Check if startup animation is currently running."""

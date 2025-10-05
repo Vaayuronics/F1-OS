@@ -24,6 +24,7 @@ class Button:
         # track last stable read for debounce
         self._last_read_time = 0.0
         self._last_state = GPIO.input(self.gpio_pin)
+        self._prev_button_down = False  # Track previous state for edge detection
 
     def poll(self) -> bool:
         """Read the GPIO pin and update internal pressed state.
@@ -46,16 +47,33 @@ class Button:
             return self.button_down
 
         # stable read, update button_down. active-low: 0 == pressed
+        self._prev_button_down = self.button_down
         if raw == 0 and not self.button_down:
             self.button_down = True
         elif raw == 1 and self.button_down:
             self.button_down = False
 
-        return self.button_down
+        return (self.button_down, self.was_pressed())
 
     def get_state(self) -> bool:
         """Returns True if the button is down (pressed)."""
         return self.button_down
+    
+    def was_pressed(self) -> bool:
+        """Returns True only on the moment the button was pressed (rising edge).
+        
+        This detects the transition from not-pressed to pressed.
+        Call poll() before this to get current state.
+        """
+        return self.button_down and not self._prev_button_down
+    
+    def was_released(self) -> bool:
+        """Returns True only on the moment the button was released (falling edge).
+        
+        This detects the transition from pressed to not-pressed.
+        Call poll() before this to get current state.
+        """
+        return not self.button_down and self._prev_button_down
 
     def get_name(self):
         return self.name
