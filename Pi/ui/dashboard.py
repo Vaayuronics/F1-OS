@@ -383,6 +383,7 @@ class F1Dashboard(QMainWindow):
     def _apply_data_dict(self, data: dict):
         """Apply telemetry data to widgets. Must run on the UI thread."""
         if 'RPM' in data:
+            print(f"[_apply_data_dict] Received RPM: {data['RPM']}")
             self.setRPM(data['RPM'])
             data.pop('RPM')
         if 'Speed' in data:
@@ -514,6 +515,7 @@ class F1Dashboard(QMainWindow):
     
     def setRPM(self, rpm):
         """Set the RPM gauge value."""
+        print(f"[setRPM] Setting RPM gauge to: {rpm}")
         self.rpm_gauge.setValue(rpm)
     
     def setSpeed(self, speed):

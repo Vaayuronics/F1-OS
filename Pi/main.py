@@ -94,6 +94,8 @@ def telemetry_update_loop():
             data = ui_data
             ui_data_cond.notify(1)
         if data:
+            if 'RPM' in data:
+                print(f"[telemetry_update_loop] Sending RPM to dashboard: {data['RPM']}")
             dashboard.set_data_thread_safe(data)
         time.sleep(dash.REFRESH_RATE)  # Update at ~58Hz to match display refresh rate
 
@@ -101,10 +103,12 @@ def hardware_update_loop():
     """Continuously poll hardware devices"""
     global interrupted, pico, arduino
     while not interrupted.is_set():
+        start = time.time()
         pico_data = pico.poll()
         arduino_data = arduino.poll()
         # would be better if done seperatly but its more efficient if done together
         process_data(pico_data, arduino_data)
+        print(f"Hardware poll and process time: {time.time() - start:.3f}s")
 
 def hardware_loop():
     '''Complete operations on hardware data'''
@@ -290,6 +294,7 @@ def process_data(pico_data, arduino_data):
                             accel, speed, rpm = calc_speed_rpm(arduino_data.get('Throttle', 0), arduino_data.get('Speed', 0), cur_gear)
                             sound_data['Accel'] = accel
                             ui_data['RPM'] = rpm
+                            print(f"[process_data] Set RPM in ui_data: {rpm}")
                             ui_data['Speed'] = arduino_data['Speed']
                             ui_data['Throttle'] = arduino_data['Throttle']
                             hardware_data['Brake'] = arduino_data['Brake']
