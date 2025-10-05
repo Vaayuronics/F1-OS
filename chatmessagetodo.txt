@@ -1,0 +1,6 @@
+TODO: Implement a debounce system in the button class.
+
+Chat message: 
+
+great, no need to do any of that. actually i really like the debounce thing. 
+lets add thaat to the picos button.py and the knob.py
