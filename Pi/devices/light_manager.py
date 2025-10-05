@@ -60,10 +60,18 @@ class LightManager:
                 self.lights[index].turn_on()
                 return
 
-    def turn_off(self, name: str):
-        for light in self.lights:
-            if light.get_name() == name:
-                light.turn_off()
+    def turn_off(self, name: str = None, index: int = None):
+        if index is None and isinstance(name, int):
+            index = name
+            name = None
+        if name:
+            for light in self.lights:
+                if light.get_name() == name:
+                    light.turn_off()
+                    return
+        if index is not None:
+            if 0 <= index < len(self.lights):
+                self.lights[index].turn_off()
                 return
             
     def __len__(self):
