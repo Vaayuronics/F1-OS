@@ -71,7 +71,7 @@ def process_command(command: dict) -> None:
     """Process the command received from stdin"""
     if command.get("command") == "reset":
         save_angles()
-        sys.stdout.write(json.dumps({'status': 'resetting'}) + '\n')
+        #sys.stdout.write(json.dumps({'status': 'resetting'}) + '\n')
         reset()
     elif command.get("command") == "poll":
         # Create state object with Down and Pressed states
@@ -84,15 +84,15 @@ def process_command(command: dict) -> None:
         sys.stdout.write(json.dumps(state) + '\n')
     elif command.get("command") == "stop":
         save_angles()
-        sys.stdout.write(json.dumps({"status": "stopping"}) + '\n')
+        #sys.stdout.write(json.dumps({"status": "stopping"}) + '\n')
         exit(0)
     elif command.get("command") == "tare":
         gyro.tare_gyro((0,0,0))
-        sys.stdout.write(json.dumps({"status": "tared"}) + '\n')
+        #sys.stdout.write(json.dumps({"status": "tared"}) + '\n')
     elif command.get("command") == "reset knobs":
         for k in knobs:
             k.set_count(100)
-        sys.stdout.write(json.dumps({"status": "knobs reset"}) + '\n')
+        #sys.stdout.write(json.dumps({"status": "knobs reset"}) + '\n')
     else:
         sys.stdout.write(json.dumps({"status": "unknown command"}) + '\n')
 

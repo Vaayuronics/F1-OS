@@ -20,14 +20,16 @@ const float wheelCircumference = 12 * PI; // In inches
 const int maxThrottle = 135; // Max angle of the potentiometer
 const int minThrottle = 0; // Min angle of the potentiometer
 int lastButtonState = HIGH; // Last state of the button
+int tareThrottle = 0; // Angle to subtract from potentiometer reading to calibrate 0 point
+int tareAngle = 0; // Angle to subtract from potentiometer reading to calibrate 0 point
 
 // Reads data from a given analog pin and returns it as an angle (-180, 180).
-float readPedal(uint8_t analogPin)
+float readPedal(uint8_t analogPin, int tareAngle)
 {
   int raw = analogRead(analogPin);
   //Serial.print("Raw Value: ");
   //Serial.println(raw);
-  float angle = (raw * (360.0 / 1023.0)) - 180;  // Convert to degrees
+  float angle = ((raw * (360.0 / 1023.0)) - 180) - tareAngle;  // Convert to degrees
   //Serial.print("Angle: ");
   //Serial.println(angle);
   if(angle < minThrottle)
@@ -125,7 +127,24 @@ void loop()
       Serial.print('\n');  // Send newline immediately after JSON
       Serial.flush();      // Force transmission
     }
-    else if(command != nullptr && strcmp(command, "reset") == 0)
+    else if (command != nullptr && strcmp(command, "tare") == 0)
+    {
+      // Tare the throttle and brake angles
+      tareThrottle = throttleAngle;
+      tareBrake = brakeAngle;
+
+      // // Create a JSON document for response
+      // JsonDocument response;
+      // response["Status"] = "Tared";
+      // response["TareThrottle"] = tareThrottle;
+      // response["TareBrake"] = tareBrake;
+
+      // // Serialize the document to a string and send it over Serial
+      // serializeJson(response, Serial);
+      // Serial.print('\n');  // Send newline immediately after JSON
+      // Serial.flush();      // Force transmission
+    }
+    else if (command != nullptr && strcmp(command, "reset") == 0)
     {
       // Reset the arduino as if it were powercycled
       wdt_enable(WDTO_15MS);  // Enable watchdog timer with 15ms timeout

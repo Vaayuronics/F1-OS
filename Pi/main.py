@@ -95,7 +95,7 @@ def hardware_update_loop():
 
 def hardware_loop():
     '''Complete operations on hardware data and update RPM lights'''
-    global interrupted, hardware_data, hardware_data_lock
+    global interrupted, hardware_data, hardware_data_lock, pico, arduino
 
     lights_boot_anim()
     
@@ -127,7 +127,16 @@ def hardware_loop():
                 if data.get('DRS', False):
                     # Activate DRS
                     pass
-                
+
+                if data.get('Launch', False):
+                    # Activate Launch Control
+                    pass
+
+                if data.get('START', False):
+                    # Start throttle
+                    arduino.send({"command": "tare"})
+                    pass
+
                 if data.get('STOP', False):
                     # Emergency stop throttle
                     pass
@@ -298,6 +307,7 @@ def process_data(pico_data, arduino_data):
                     new_ui_data['Alert Title'] = "Car Started"
                     new_ui_data['Alert Message'] = "Car has been started."
                     new_ui_data['Started'] = True
+                    new_hardware_data['START'] = True
             
             # Launch control when held down after started
             if start_btn.get('Down', False) and new_ui_data.get('Started', False):
@@ -312,9 +322,10 @@ def process_data(pico_data, arduino_data):
                 new_ui_data['Alert Title'] = "Car Stopped"
                 new_ui_data['Alert Message'] = "Car has been turned off."
                 new_ui_data['Started'] = False
-            
-            new_hardware_data['STOP'] = stop_btn.get('Down', False)
-            
+
+            if stop_btn.get('Down', False):
+                new_hardware_data['STOP'] = stop_btn.get('Down', False)
+
             # Play/Pause
             if buttons.get('Play/Pause', {}).get('Pressed', False):
                 new_sound_data['Pause'] = not new_sound_data.get('Pause', False)
