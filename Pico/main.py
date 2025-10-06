@@ -89,6 +89,10 @@ def process_command(command: dict) -> None:
     elif command.get("command") == "tare":
         gyro.tare_gyro((0,0,0))
         sys.stdout.write(json.dumps({"status": "tared"}) + '\n')
+    elif command.get("command") == "reset knobs":
+        for k in knobs:
+            k.set_count(100)
+        sys.stdout.write(json.dumps({"status": "knobs reset"}) + '\n')
     else:
         sys.stdout.write(json.dumps({"status": "unknown command"}) + '\n')
 
