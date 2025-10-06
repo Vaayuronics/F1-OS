@@ -8,13 +8,6 @@ import ui.dashboard as dash
 from devices.light_manager import LightManager
 from devices.button import Button
 
-'''
-TODO: Check to see if the usb ports on the Raspberry Pi are still not working with tty.
-NOTE: Possible issue with polling rate being so high button inputs are counted multiple times.
-        If this is the case, implement a debounce system in the button class.
-TODO: YES THAT WAS AN ISSUE
-'''
-
 pico = None
 arduino = None
 lights = LightManager([16, 6, 5, 7, 24, 23, 22, 27, 17], 

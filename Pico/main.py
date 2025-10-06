@@ -20,7 +20,7 @@ gyro = gyro_module.Gyro(16, 17)
 buttons = [Button(0, "Shift Emulation Toggle"), Button(1, "Headlights"), Button(2, "Hazards"),  Button(3, "Change Engine"), 
            Button(4, "Change Music"), Button( 5,"DRS"), Button(6, "Start"), Button(7, "Stop"), 
            Button(8, "Play/Pause"), Button(9, "Horn"), Button(10, "Auto Turn Signal Toggle")]
-knobs = [Knob(11, 12, 13, "Engine Vol"), Knob(19, 20, 21, "Engine Tune"), Knob(22, 24, 25, "Music Vol")]  # dt, clk, sw
+knobs = [Knob(11, 12, 13, "Engine Vol", default_count=100), Knob(19, 20, 21, "Engine Tune", default_count=100), Knob(22, 24, 25, "Music Vol", default_count=100)]  # dt, clk, sw
 poller = select.poll()
 last_led_toggle = 0
 

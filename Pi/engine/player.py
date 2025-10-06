@@ -234,13 +234,11 @@ class EngineAudioPlayer:
             chunk = (chunk * np.float32(vol)).astype(np.float32, copy=False)
 
         chunk = np.ascontiguousarray(chunk, dtype=np.float32)
-    
-        try:
-            with self.queue_lock:
-                self.buffer.put_nowait(chunk)
-        except queue.Full:
-            print("Audio buffer full, dropping chunk")
-            return False
+
+        with self.queue_lock:
+            if self.buffer.full():
+                self.buffer.get_nowait()  # Discard oldest chunk
+            self.buffer.put_nowait(chunk)
 
         return True
 

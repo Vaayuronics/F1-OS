@@ -2,7 +2,7 @@ from machine import Pin
 import time
 
 class Knob:
-    def __init__(self, dt : int, clk : int, sw : int = -1, name : str = "Knob", debounce_ms : int = 50):
+    def __init__(self, dt : int, clk : int, sw : int = -1, name : str = "Knob", debounce_ms : int = 50, default_count : int = 0):
         '''Creates a Rotary Encoder (Knob) object.\n
         Requires the dt pin : direction.\n
         Requires the clk pin : change pin.\n
@@ -14,7 +14,7 @@ class Knob:
             self.sw = None
         else:
             self.sw = Pin(sw, Pin.IN, Pin.PULL_UP)
-        self.counter = 0
+        self.counter = default_count
         self.last_clk = self.clk.value()
         self.button_down = False
         self.name = name
