@@ -394,6 +394,7 @@ def process_data(pico_data, arduino_data):
             new_ui_data['RPM'] = rpm
             new_ui_data['Speed'] = arduino_data['Speed']
             new_ui_data['Throttle'] = arduino_data['Throttle'] / MAX_THROTTLE_DEG * 100  # Scale to 0-100
+            print(f"THROTTLE: {new_ui_data['Throttle']}")
             new_hardware_data['Brake'] = arduino_data['Brake']
             new_hardware_data['Throttle'] = arduino_data['Throttle']
             new_hardware_data['RPM'] = rpm

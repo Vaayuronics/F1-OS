@@ -21,7 +21,7 @@ const int maxThrottle = 135; // Max angle of the potentiometer
 const int minThrottle = 0; // Min angle of the potentiometer
 int lastButtonState = HIGH; // Last state of the button
 int tareThrottle = 0; // Angle to subtract from potentiometer reading to calibrate 0 point
-int tareAngle = 0; // Angle to subtract from potentiometer reading to calibrate 0 point
+int tareBrake = 0; // Angle to subtract from potentiometer reading to calibrate 0 point
 
 // Reads data from a given analog pin and returns it as an angle (-180, 180).
 float readPedal(uint8_t analogPin, int tareAngle)
@@ -96,8 +96,8 @@ float readSpeed()
 
 void loop() 
 {
-  float throttleAngle = readPedal(analogThrottle);
-  float brakeAngle = readPedal(analogBrake);
+  float throttleAngle = readPedal(analogThrottle, tareThrottle);
+  float brakeAngle = readPedal(analogBrake, tareBrake);
   float speed = readSpeed();
   //Serial.print("Throttle Angle: ");
   //Serial.println(throttleAngle);
@@ -130,6 +130,8 @@ void loop()
     else if (command != nullptr && strcmp(command, "tare") == 0)
     {
       // Tare the throttle and brake angles
+      throttleAngle = readPedal(analogThrottle, 0);
+      brakeAngle = readPedal(analogBrake, 0);
       tareThrottle = throttleAngle;
       tareBrake = brakeAngle;
 
