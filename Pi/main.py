@@ -2,6 +2,7 @@ from devices.testerial import JSONSerialReader
 import engine.soundsys as sound
 import time
 import threading
+import multiprocessing
 import sys
 import signal
 import queue
@@ -29,11 +30,11 @@ dashboard = None
 
 MAX_THROTTLE_DEG = 135
 
-# Use queues for thread-safe data passing
-# maxsize=5 allows for small bursts without dropping data
-ui_data_queue = queue.Queue(maxsize=5)
-hardware_data_queue = queue.Queue(maxsize=5)
-sound_data_queue = queue.Queue(maxsize=5)
+# Use multiprocessing queues for inter-process communication (avoids GIL)
+# This allows UI to run on its own CPU core without being blocked by other threads
+ui_data_queue = None  # Will be initialized in main
+hardware_data_queue = None
+sound_data_queue = None
 
 # Persistent state dictionary with lock
 persistent_state = {
@@ -52,9 +53,9 @@ persistent_state = {
     'Prev Speed': 0,
     'Prev Time': 0,
 }
-persistent_state_lock = threading.Lock()
+persistent_state_lock = None  # Will be initialized as multiprocessing.Lock()
 
-interrupted = threading.Event()
+interrupted = None  # Will be initialized as multiprocessing.Event()
 
 def signal_handler(signum, frame):
     """Handle SIGINT gracefully"""
@@ -81,7 +82,7 @@ signal.signal(signal.SIGINT, signal_handler)
 def update_rpm_lights(rpm):
     """Update lights based on RPM value."""
     global lights
-    lights_count = len(lights.lights)
+    lights_count = len(lights)
     rpm_per_light = (dash.MAX_RPM - 100) / lights_count
     
     for i in range(lights_count):
@@ -100,29 +101,29 @@ def get_ui_data():
     except queue.Empty:
         return None
 
-def hardware_update_loop():
-    """Continuously poll hardware devices"""
-    global interrupted, pico, arduino
-    while not interrupted.is_set():
+def hardware_update_loop(interrupted_event):
+    """Continuously poll hardware devices - runs in separate thread within hardware process"""
+    global pico, arduino
+    while not interrupted_event.is_set():
         try:
             pico_data = pico.poll()
             arduino_data = arduino.poll()
             process_data(pico_data, arduino_data)
-            time.sleep(0.05)  # 20Hz polling - responsive but not wasteful
+            time.sleep(0.05)  # 20Hz polling - now won't block UI thanks to separate process
         except Exception as e:
             print(f"[hardware_update_loop] Error: {e}")
-            if interrupted.is_set():
+            if interrupted_event.is_set():
                 break
     
     print("[hardware_update_loop] Thread exiting")
 
-def hardware_loop():
-    '''Complete operations on hardware data and update RPM lights'''
-    global interrupted, arduino
+def hardware_loop(interrupted_event):
+    '''Complete operations on hardware data and update RPM lights - runs in separate thread within hardware process'''
+    global arduino
 
     lights_boot_anim()
     
-    while not interrupted.is_set():
+    while not interrupted_event.is_set():
         try:
             # Wait for new data with timeout
             try:
@@ -166,18 +167,17 @@ def hardware_loop():
             
         except Exception as e:
             print(f"[hardware_loop] Error: {e}")
-            if interrupted.is_set():
+            if interrupted_event.is_set():
                 break
     
     print("[hardware_loop] Thread exiting")
 
-def audio_loop():
-    '''Play the sounds chunks and return '''
-    global interrupted
+def audio_loop(interrupted_event):
+    '''Play the sounds chunks and return - runs in separate thread within audio process'''
     sound.load_tracks()
     sound.play_startup_sound()
     
-    while not interrupted.is_set():
+    while not interrupted_event.is_set():
         try:
             # Wait for new data with timeout
             try:
@@ -205,7 +205,7 @@ def audio_loop():
             
         except Exception as e:
             print(f"[audio_loop] Error: {e}")
-            if interrupted.is_set():
+            if interrupted_event.is_set():
                 break
     
     print("[audio_loop] Thread exiting")
@@ -497,45 +497,149 @@ def lights_boot_anim():
         time.sleep(0.3)
     lights.turn_off_all()
 
-def boot():
-    print("Booting up system.")
-
-    global pico, arduino, dashboard, lights
-
+def hardware_process(interrupted_event, ui_queue, hw_queue, sound_queue, state_lock):
+    """Main hardware process - runs on separate CPU core, avoiding GIL with UI"""
+    global pico, arduino, lights, ui_data_queue, hardware_data_queue, sound_data_queue, persistent_state_lock
+    
+    # Set up process-local variables
+    ui_data_queue = ui_queue
+    hardware_data_queue = hw_queue
+    sound_data_queue = sound_queue
+    persistent_state_lock = state_lock
+    
+    print("[Hardware Process] Starting...")
+    
+    # Initialize hardware devices in this process
+    global pico, arduino, lights
     pico = JSONSerialReader("/dev/pico")
     arduino = JSONSerialReader("/dev/arduino")
+    lights = LightManager([16, 6, 5, 7, 24, 23, 22, 27, 17], 
+                         ["Green 1", "Green 2", "Green 3", "Green 4", "Blue 1", "Blue 2", "Yellow", "Orange", "Red"])
+    
+    # Create local threading event for threads within this process
+    local_interrupted = threading.Event()
+    
+    # Start hardware threads within this process
+    hardware_update_thread = threading.Thread(target=hardware_update_loop, args=(local_interrupted,), daemon=True)
+    hardware_update_thread.start()
+    
+    hardware_thread = threading.Thread(target=hardware_loop, args=(local_interrupted,), daemon=True)
+    hardware_thread.start()
+    
+    # Wait for shutdown signal from main process
+    try:
+        interrupted_event.wait()
+    except KeyboardInterrupt:
+        pass
+    
+    print("[Hardware Process] Shutting down...")
+    local_interrupted.set()
+    
+    # Cleanup
+    if lights:
+        lights.turn_off_all()
+        lights.cleanup()
+    if pico:
+        pico.send({"command": "stop"})
+        pico.ser.close()
+    if arduino:
+        arduino.send({"command": "stop"})
+        arduino.ser.close()
+    
+    time.sleep(0.5)
+    print("[Hardware Process] Exited")
 
-    # Create dashboard first (no 3D model needed - using 2D vector graphics)
+def audio_process(interrupted_event, sound_queue):
+    """Main audio process - runs on separate CPU core"""
+    global sound_data_queue
+    
+    sound_data_queue = sound_queue
+    
+    print("[Audio Process] Starting...")
+    
+    # Create local threading event
+    local_interrupted = threading.Event()
+    
+    # Start audio thread within this process
+    audio_thread = threading.Thread(target=audio_loop, args=(local_interrupted,), daemon=True)
+    audio_thread.start()
+    
+    # Wait for shutdown signal
+    try:
+        interrupted_event.wait()
+    except KeyboardInterrupt:
+        pass
+    
+    print("[Audio Process] Shutting down...")
+    local_interrupted.set()
+    time.sleep(0.5)
+    print("[Audio Process] Exited")
+
+def boot():
+    print("Booting up system with multiprocessing (UI on separate CPU core)...")
+
+    global dashboard, interrupted, ui_data_queue, hardware_data_queue, sound_data_queue, persistent_state_lock
+    
+    # Initialize multiprocessing primitives
+    interrupted = multiprocessing.Event()
+    ui_data_queue = multiprocessing.Queue(maxsize=5)
+    hardware_data_queue = multiprocessing.Queue(maxsize=5)
+    sound_data_queue = multiprocessing.Queue(maxsize=5)
+    persistent_state_lock = multiprocessing.Lock()
+    
+    # Start hardware process (runs on separate CPU core - no GIL conflict!)
+    hw_process = multiprocessing.Process(
+        target=hardware_process,
+        args=(interrupted, ui_data_queue, hardware_data_queue, sound_data_queue, persistent_state_lock),
+        daemon=False
+    )
+    hw_process.start()
+    print(f"[Main] Hardware process started (PID: {hw_process.pid})")
+    
+    # Start audio process (runs on separate CPU core)
+    audio_proc = multiprocessing.Process(
+        target=audio_process,
+        args=(interrupted, sound_data_queue),
+        daemon=False
+    )
+    audio_proc.start()
+    print(f"[Main] Audio process started (PID: {audio_proc.pid})")
+    
+    # Create dashboard in main process (gets its own CPU core!)
     dashboard = dash.F1Dashboard("ui/dashboard_settings.ini")
     
     # Give dashboard access to data and shutdown event
     dashboard.set_data_source(get_ui_data)
     dashboard.set_interrupted_event(interrupted)
 
-    # Start hardware threads (no lighting or telemetry threads needed)
-    hardware_update_thread = threading.Thread(target=hardware_update_loop, daemon=True)
-    hardware_update_thread.start()
-
-    hardware_thread = threading.Thread(target=hardware_loop, daemon=True)
-    hardware_thread.start()
-
-    audio_thread = threading.Thread(target=audio_loop, daemon=True)
-    audio_thread.start()
-
-    # Start dashboard (blocks until window closes)
+    # Start dashboard (blocks until window closes) - runs smoothly on its own core
     dashboard.enable_fullscreen()
+    print("[Main] Starting UI (runs on main process with dedicated CPU core)")
     exit_code = dashboard.run()
     
-    # After dashboard closes, ensure threads stop
-    print("[Main] Dashboard closed, setting interrupted flag...")
+    # After dashboard closes, signal all processes to stop
+    print("[Main] Dashboard closed, signaling processes to stop...")
     interrupted.set()
     
-    # Wait for threads to finish
-    time.sleep(0.5)
+    # Wait for processes to finish
+    hw_process.join(timeout=3)
+    audio_proc.join(timeout=3)
     
-    print(f"Application finished with exit code: {exit_code}")
-    lights.turn_off_all()
+    # Force terminate if still alive
+    if hw_process.is_alive():
+        print("[Main] Force terminating hardware process...")
+        hw_process.terminate()
+        hw_process.join()
+    
+    if audio_proc.is_alive():
+        print("[Main] Force terminating audio process...")
+        audio_proc.terminate()
+        audio_proc.join()
+    
+    print(f"[Main] Application finished with exit code: {exit_code}")
     sys.exit(exit_code)
 
 if __name__ == "__main__":
+    # Required for multiprocessing on Windows/macOS (safe to have on Linux too)
+    multiprocessing.set_start_method('spawn', force=True)
     boot()
