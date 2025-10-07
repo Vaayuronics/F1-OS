@@ -1,9 +1,9 @@
 from PySide6.QtWidgets import (QMainWindow, QFrame, QSplitter, 
                               QSizePolicy, QWidget, QVBoxLayout, QLabel, QHBoxLayout, QMessageBox, QApplication, QScrollArea)
 from PySide6.QtCore import Qt, QSettings, QSize, Signal, QTimer
-from PySide6.QtGui import QFont
+from PySide6.QtGui import QFont, QPixmap, QPainter
 from ui.gauge import GaugeWidget
-from ui.car3d import Car3DWidget
+from ui.car2d import Car2DWidget
 from ui.battery_gauge import BatteryGaugeWidget
 from ui.volume_gauge import VolumeGaugeWidget
 import os
@@ -210,21 +210,9 @@ class F1Dashboard(QMainWindow):
         
         self.telemetry_resize_callbacks = []
         
-        # Verify model exists and handle accordingly
+        # No longer using 3D model - using 2D vector graphics instead
         self.model_path = None
-        self.show_model_fallback_notification = False  # Flag for deferred notification
-        if model_path:
-            model_exists = os.path.exists(model_path)
-            print(f"3D Model path: {model_path}")
-            print(f"Model exists: {model_exists}")
-            
-            if not model_exists:
-                print(f"Model file not found: {model_path}")
-                print("Using default fallback model instead.")
-                self.show_model_fallback_notification = True  # Show notification after UI is ready
-                self.model_path = None
-            else:
-                self.model_path = model_path
+        self.show_model_fallback_notification = False
         
         # Create central widget and main layout
         central_widget = QWidget()
@@ -248,10 +236,10 @@ class F1Dashboard(QMainWindow):
         self.mph_gauge.setMinimumWidth(80)  # Reduced from 150 to 80
         self.mph_gauge.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Expanding)
         
-        # 3D Car visualization - ultra compact minimum for tiny 480x800 screen
-        self.car_widget = Car3DWidget(self.model_path)
-        self.car_widget.setMinimumWidth(20)   # Ultra small minimum (was 40)
-        self.car_widget.setMinimumHeight(30)  # Ultra small minimum (was 50)
+        # 2D Car visualization - lightweight image-based widget
+        self.car_widget = Car2DWidget()
+        self.car_widget.setMinimumWidth(20)
+        self.car_widget.setMinimumHeight(30)
         self.car_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         
         # Add widgets to splitter
@@ -261,11 +249,11 @@ class F1Dashboard(QMainWindow):
         
         # Set stretch factors to prevent linked dragging behavior
         self.main_splitter.setStretchFactor(0, 1)  # RPM gauge - fixed proportion
-        self.main_splitter.setStretchFactor(1, 1)  # 3D widget - reduced flexibility
+        self.main_splitter.setStretchFactor(1, 1)  # 2D car widget - lightweight
         self.main_splitter.setStretchFactor(2, 1)  # MPH gauge - fixed proportion
         
-        # Set initial sizes better suited for small screen (480px width) - much smaller 3D area
-        self.main_splitter.setSizes([120, 80, 120])  # Much smaller center area for 3D view
+        # Set initial sizes better suited for small screen (480px width)
+        self.main_splitter.setSizes([120, 80, 120])  # Balanced layout with 2D car in center
         
         # Load saved splitter sizes if available
         self.load_splitter_settings()
@@ -434,16 +422,6 @@ class F1Dashboard(QMainWindow):
         
         # Start the startup animation after showing
         self.start_startup_animation()
-        # Show model fallback notification if needed
-        if self.show_model_fallback_notification:
-            self.show_notification(
-                "MODEL NOT FOUND",
-                "Using fallback model",
-                3000,  # 3 second duration
-                "#4A2E1E",  # Orange/brown background for warning
-                "white",
-                "#FFD700"   # Gold subtitle color
-            )
         return self.app.exec()
     
     def set_data_source(self, data_getter_func):

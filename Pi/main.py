@@ -21,9 +21,10 @@ dashboard = None
 MAX_THROTTLE_DEG = 135
 
 # Use queues for thread-safe data passing
-ui_data_queue = queue.Queue(maxsize=1)
-hardware_data_queue = queue.Queue(maxsize=1)
-sound_data_queue = queue.Queue(maxsize=1)
+# maxsize=5 allows for small bursts without dropping data
+ui_data_queue = queue.Queue(maxsize=5)
+hardware_data_queue = queue.Queue(maxsize=5)
+sound_data_queue = queue.Queue(maxsize=5)
 
 # Persistent state dictionary with lock
 persistent_state = {
@@ -74,14 +75,18 @@ def update_rpm_lights(rpm):
     lights_count = len(lights.lights)
     rpm_per_light = dash.MAX_RPM / lights_count
     
+    # Calculate how many lights should be on based on current RPM
+    lights_to_activate = int(rpm / rpm_per_light)
+    
     for i in range(lights_count):
-        if rpm >= i * rpm_per_light:
+        if i < lights_to_activate:
             lights.turn_on(i)
         else:
             lights.turn_off(i)
             
+    # Flash the last light if over max RPM
     if rpm > dash.MAX_RPM:
-        lights.toggle(lights_count - 1)  # Flash the last light if over max RPM
+        lights.toggle(lights_count - 1)
 
 def get_ui_data():
     """Get latest UI data without blocking."""
@@ -111,7 +116,6 @@ def hardware_loop():
     global interrupted, arduino
 
     lights_boot_anim()
-    last_rpm = 0
     
     while not interrupted.is_set():
         try:
@@ -119,11 +123,9 @@ def hardware_loop():
             try:
                 data = hardware_data_queue.get(timeout=0.1)
                 
-                # Update RPM lights only if changed significantly
+                # Update RPM lights on every data update
                 rpm = data.get('RPM', 0)
-                if abs(rpm - last_rpm) > 100:  # Only update if changed by 100+ RPM
-                    update_rpm_lights(rpm)
-                    last_rpm = rpm
+                update_rpm_lights(rpm)
                 
                 # Process hardware commands
                 #TODO: Process hardware data
@@ -449,26 +451,39 @@ def process_data(pico_data, arduino_data):
                 persistent_state['Prev Time'] = time.time()
     
     # Push to queues (replaces old data if queue is full)
+    # Always prioritize latest data by removing old first
     if new_ui_data:
+        if ui_data_queue.full():
+            try:
+                ui_data_queue.get_nowait()  # Remove old data first
+            except queue.Empty:
+                pass
         try:
             ui_data_queue.put_nowait(new_ui_data)
         except queue.Full:
-            ui_data_queue.get_nowait()  # Remove old data
-            ui_data_queue.put_nowait(new_ui_data)
+            pass  # Should never happen after get_nowait
     
     if new_hardware_data:
+        if hardware_data_queue.full():
+            try:
+                hardware_data_queue.get_nowait()  # Remove old data first
+            except queue.Empty:
+                pass
         try:
             hardware_data_queue.put_nowait(new_hardware_data)
         except queue.Full:
-            hardware_data_queue.get_nowait()
-            hardware_data_queue.put_nowait(new_hardware_data)
+            pass
     
     if new_sound_data:
+        if sound_data_queue.full():
+            try:
+                sound_data_queue.get_nowait()  # Remove old data first
+            except queue.Empty:
+                pass
         try:
             sound_data_queue.put_nowait(new_sound_data)
         except queue.Full:
-            sound_data_queue.get_nowait()
-            sound_data_queue.put_nowait(new_sound_data)
+            pass
 
 def lights_boot_anim():
     time.sleep(3)
@@ -488,8 +503,8 @@ def boot():
     pico = JSONSerialReader("/dev/pico")
     arduino = JSONSerialReader("/dev/arduino")
 
-    # Create dashboard first
-    dashboard = dash.F1Dashboard("ui/dashboard_settings.ini", "ui/model.fbx")
+    # Create dashboard first (no 3D model needed - using 2D vector graphics)
+    dashboard = dash.F1Dashboard("ui/dashboard_settings.ini")
     
     # Give dashboard access to data and shutdown event
     dashboard.set_data_source(get_ui_data)
