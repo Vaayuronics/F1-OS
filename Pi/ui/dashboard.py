@@ -551,9 +551,6 @@ class F1Dashboard(QMainWindow):
         
         # Load bottom splitter settings
         self.load_bottom_splitter_settings()
-        
-        # Load camera settings if available
-        self.load_camera_settings()
     
     def _connect_geometry_events(self):
         """Connect window resize and move events to save settings."""
@@ -567,9 +564,6 @@ class F1Dashboard(QMainWindow):
             telemetry_size = self.get_telemetry_box_size()
             if telemetry_size:
                 self.settings.setValue("telemetry/size", f"{telemetry_size[0]},{telemetry_size[1]}")
-            
-            # Save camera settings when window changes (user might have moved camera)
-            self.save_camera_settings()
         
         self.resizeEvent = lambda event: (super(F1Dashboard, self).resizeEvent(event), on_window_geometry_changed())
         self.moveEvent = lambda event: (super(F1Dashboard, self).moveEvent(event), on_window_geometry_changed())
@@ -875,50 +869,11 @@ class F1Dashboard(QMainWindow):
         
         return False  # Failed to load
     
-    def load_camera_settings(self):
-        """Load saved camera settings from configuration."""
-        if self.settings.contains("camera/position"):
-            try:
-                pos_str = self.settings.value("camera/position")
-                center_str = self.settings.value("camera/viewCenter", "0,0,0")
-                up_str = self.settings.value("camera/upVector", "0,1,0")
-                
-                pos = [float(x) for x in pos_str.split(",")]
-                center = [float(x) for x in center_str.split(",")]
-                up = [float(x) for x in up_str.split(",")]
-                
-                camera_settings = {
-                    'position': pos,
-                    'viewCenter': center,
-                    'upVector': up
-                }
-                
-                self.car_widget.set_camera_settings(camera_settings)
-                print(f"Loaded camera settings: {camera_settings}")
-                return True
-            except Exception as e:
-                print(f"Error loading camera settings: {e}")
-        return False
-    
-    def save_camera_settings(self):
-        """Save current camera settings to configuration."""
-        camera_settings = self.car_widget.get_camera_settings()
-        if camera_settings:
-            try:
-                pos = camera_settings['position']
-                center = camera_settings['viewCenter']
-                up = camera_settings['upVector']
-                
-                self.settings.setValue("camera/position", ",".join(str(x) for x in pos))
-                self.settings.setValue("camera/viewCenter", ",".join(str(x) for x in center))
-                self.settings.setValue("camera/upVector", ",".join(str(x) for x in up))
-            except Exception as e:
-                print(f"Error saving camera settings: {e}")
+
     
     def closeEvent(self, event):
         """Override close event to save settings before closing.""" 
         self.save_splitter_settings()
-        self.save_camera_settings()
         super().closeEvent(event)
     
     def set_telemetry_box_size(self, width, height):
