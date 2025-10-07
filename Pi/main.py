@@ -201,14 +201,11 @@ def audio_loop():
     
     print("[audio_loop] Thread exiting")
 
-def calc_speed_rpm(throttle_degrees: float, speed: float, gear: int, prev_speed: float = 0, prev_time: float = 0, engine_speed : float = 0, motor_rpm: int = 0) -> tuple[bool, float, float]:
+def calc_speed_rpm(throttle: float, speed: float, gear: int, prev_speed: float = 0, prev_time: float = 0, engine_speed : float = 0, motor_rpm: int = 0) -> tuple[bool, float, float]:
     '''Simple RPM calculation based on throttle (in degrees 0-135) and speed.'''
     accel = False
     play_speed = 1.0
     rpm = 0.0
-
-    # Convert throttle from degrees to percentage (0-100)
-    throttle_percent = (throttle_degrees / MAX_THROTTLE_DEG) * 100
 
     rate = 0
     if prev_time > 0 and (time.time() - prev_time) > 0:
@@ -217,10 +214,10 @@ def calc_speed_rpm(throttle_degrees: float, speed: float, gear: int, prev_speed:
     #TODO: Finish calculations
 
     if gear == 0:
-        rpm = throttle_percent * 103.7
+        rpm = throttle * 103.7
     else:
         # Add proper gear-based RPM calculation here
-        rpm = (speed * 60 * gear * 10) + (throttle_percent * 50)
+        rpm = (speed * 60 * gear * 10) + (throttle * 50)
 
     if speed >= prev_speed:
         accel = True
