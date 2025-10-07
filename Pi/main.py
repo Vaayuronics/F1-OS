@@ -1,20 +1,34 @@
-from devices.testerial import JSONSerialReader
-import engine.soundsys as sound
+#from devices.testerial import JSONSerialReader
+#import engine.soundsys as sound
 import time
 import threading
 import sys
 import signal
 import queue
+import os
 import ui.dashboard as dash
-from devices.light_manager import LightManager
-from devices.button import Button
+#from devices.light_manager import LightManager
+#from devices.button import Button
+
+# Enable GPU acceleration on Raspberry Pi
+# Set Qt platform to use OpenGL ES (hardware accelerated)
+os.environ['QT_QPA_PLATFORM'] = 'eglfs'  # Use EGL for fullscreen with GPU
+# Alternative: 'xcb' for X11 window manager, but 'eglfs' is faster
+# os.environ['QT_QPA_PLATFORM'] = 'xcb'
+
+# Force Qt to use OpenGL ES 2.0 (Raspberry Pi GPU)
+os.environ['QT_QUICK_BACKEND'] = 'software'  # Use software rendering as fallback if needed
+os.environ['QT_QPA_EGLFS_ALWAYS_SET_MODE'] = '1'  # Ensure mode is set
+
+# Enable GPU rendering for widgets
+os.environ['QSG_RENDER_LOOP'] = 'threaded'  # Use threaded rendering loop
 
 pico = None
 arduino = None
-lights = LightManager([16, 6, 5, 7, 24, 23, 22, 27, 17], 
-                      ["Green 1", "Green 2", "Green 3", "Green 4", "Blue 1", "Blue 2", "Yellow", "Orange", "Red"])
-gear_up = Button(13, "Gear Up")
-gear_down = Button(19, "Gear Down")
+#lights = LightManager([16, 6, 5, 7, 24, 23, 22, 27, 17], 
+#["Green 1", "Green 2", "Green 3", "Green 4", "Blue 1", "Blue 2", "Yellow", "Orange", "Red"])
+#gear_up = Button(13, "Gear Up")
+#gear_down = Button(19, "Gear Down")
 cur_gear = 0 # Supposedly int operations are atomic in python so this should be fine without a lock
 dashboard = None
 
@@ -529,4 +543,9 @@ def boot():
     sys.exit(exit_code)
 
 if __name__ == "__main__":
-    boot()
+    #boot()
+    dashboard = dash.F1Dashboard("ui/dashboard_settings.ini")
+    dashboard.set_data_source(get_ui_data)
+    dashboard.set_interrupted_event(interrupted)
+    dashboard.enable_fullscreen()
+    exit_code = dashboard.run()

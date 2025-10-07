@@ -74,10 +74,10 @@ class GaugeWidget(QWidget):
     def paintEvent(self, event):
         """Render the gauge on screen."""
         painter = QPainter(self)
-        # Use minimal rendering hints for speed
-        painter.setRenderHint(QPainter.Antialiasing, False)
-        painter.setRenderHint(QPainter.TextAntialiasing, True)  # Keep text smooth
-        painter.setRenderHint(QPainter.SmoothPixmapTransform, False)
+        # Enable full antialiasing for smooth graphics
+        painter.setRenderHint(QPainter.Antialiasing, True)
+        painter.setRenderHint(QPainter.TextAntialiasing, True)
+        painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
         
         # Only paint the dirty region
         painter.setClipRect(event.rect())

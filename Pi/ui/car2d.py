@@ -31,8 +31,8 @@ class Car2DWidget(QWidget):
     def paintEvent(self, event):
         """Draw a stylized F1 car from top-down view."""
         painter = QPainter(self)
-        # Disable antialiasing for max performance
-        painter.setRenderHint(QPainter.Antialiasing, False)
+        # Enable antialiasing for smooth graphics
+        painter.setRenderHint(QPainter.Antialiasing, True)
         painter.setClipRect(event.rect())  # Only paint dirty region
         
         # Fill background

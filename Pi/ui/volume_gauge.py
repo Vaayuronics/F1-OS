@@ -31,8 +31,8 @@ class VolumeGaugeWidget(QWidget):
     def paintEvent(self, event):
         """Render the volume gauge on screen."""
         painter = QPainter(self)
-        # Optimize rendering hints
-        painter.setRenderHint(QPainter.Antialiasing, False)
+        # Enable full antialiasing for smooth graphics
+        painter.setRenderHint(QPainter.Antialiasing, True)
         painter.setRenderHint(QPainter.TextAntialiasing, True)
         painter.setClipRect(event.rect())  # Only paint dirty region
         

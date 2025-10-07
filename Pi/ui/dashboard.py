@@ -1,7 +1,8 @@
 from PySide6.QtWidgets import (QMainWindow, QFrame, QSplitter, 
                               QSizePolicy, QWidget, QVBoxLayout, QLabel, QHBoxLayout, QMessageBox, QApplication, QScrollArea)
 from PySide6.QtCore import Qt, QSettings, QSize, Signal, QTimer
-from PySide6.QtGui import QFont, QPixmap, QPainter
+from PySide6.QtGui import QFont, QPixmap, QPainter, QSurfaceFormat
+from PySide6.QtOpenGLWidgets import QOpenGLWidget
 from ui.gauge import GaugeWidget
 from ui.car2d import Car2DWidget
 from ui.battery_gauge import BatteryGaugeWidget
@@ -191,6 +192,13 @@ class F1Dashboard(QMainWindow):
             self.app.setStyle('Fusion')  # Use Fusion style for a more modern look
             self.app.setApplicationName("F1-OS")
             self.app.setOrganizationName("F1-OS")
+            
+            # Enable OpenGL hardware acceleration for Raspberry Pi
+            # Configure OpenGL surface format for better performance
+            fmt = QSurfaceFormat()
+            fmt.setSamples(4)  # 4x MSAA for antialiasing
+            fmt.setSwapInterval(1)  # Enable VSync
+            QSurfaceFormat.setDefaultFormat(fmt)
         else:
             self.app = QApplication.instance()
             
