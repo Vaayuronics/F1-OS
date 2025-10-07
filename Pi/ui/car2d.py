@@ -22,10 +22,18 @@ class Car2DWidget(QWidget):
         # Background
         self.bg_color = QColor("#232323")
         
+        # Qt optimizations for static content
+        self.setAttribute(Qt.WA_StaticContents)  # Widget doesn't change
+        self.setAttribute(Qt.WA_OpaquePaintEvent)  # We draw everything
+        self.setAttribute(Qt.WA_NoSystemBackground)
+        self.setUpdatesEnabled(True)
+        
     def paintEvent(self, event):
         """Draw a stylized F1 car from top-down view."""
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
+        # Disable antialiasing for max performance
+        painter.setRenderHint(QPainter.Antialiasing, False)
+        painter.setClipRect(event.rect())  # Only paint dirty region
         
         # Fill background
         painter.fillRect(self.rect(), self.bg_color)

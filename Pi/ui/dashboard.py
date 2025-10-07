@@ -10,7 +10,7 @@ import os
 import sys
 
 MAX_RPM = 14000 # Max RPM for the gauge, actual should go to about 14.5k
-UPDATE_MS = 50  # Update interval in milliseconds (20Hz)
+UPDATE_MS = 33  # Update interval in milliseconds (30Hz for smoother updates)
 
 #TODO: Debug the update telemetry to find out where the bottle neck is
 
@@ -395,10 +395,15 @@ class F1Dashboard(QMainWindow):
         self._setup_window_geometry()
         self._connect_geometry_events()
         
-        # Set up data pull timer (20Hz refresh rate) but DON'T start it yet
+        # Set up data pull timer (30Hz refresh rate) but DON'T start it yet
         self.data_timer = QTimer()
+        self.data_timer.setTimerType(Qt.PreciseTimer)  # Use precise timing
         self.data_timer.timeout.connect(self._pull_and_apply_data)
         # Timer will be started in run() after window is shown
+        
+        # Enable Qt's automatic update coalescing for better performance
+        self.setAttribute(Qt.WA_OpaquePaintEvent)  # We draw everything ourselves
+        self.setAttribute(Qt.WA_NoSystemBackground)
         
         # Initialize startup animation variables
         self.startup_animation_active = False
@@ -436,7 +441,19 @@ class F1Dashboard(QMainWindow):
         """Pull data from external source and apply it (runs on UI thread via QTimer)."""
         if self.external_data_source:
             try:
-                data = self.external_data_source()
+                # Drain queue - only process the LATEST data to avoid lag
+                # This prevents "catching up" behavior
+                data = None
+                attempts = 0
+                while attempts < 10:  # Drain up to 10 items, keep only latest
+                    new_data = self.external_data_source()
+                    if new_data:
+                        data = new_data
+                        attempts += 1
+                    else:
+                        break
+                
+                # Apply only the latest data
                 if data:
                     self._apply_data_dict(data)
             except RuntimeError:
@@ -768,34 +785,28 @@ class F1Dashboard(QMainWindow):
     def updateTelemetryDisplay(self, data_dict):
         """Update telemetry display with ZERO widget creation - only setText() calls."""
         if not data_dict:
-            # Hide all rows
-            for i in range(self._max_telemetry_rows):
-                self._telemetry_widget_pool[i]['row'].hide()
-                self._telemetry_widget_pool[i]['key'] = None
-            return
+            return  # Skip hiding - waste of time
         
         data_keys = list(data_dict.keys())
         num_items = len(data_keys)
         
         # Update visible rows with new data (ONLY setText calls)
-        for i in range(self._max_telemetry_rows):
-            if i < num_items:
-                key = data_keys[i]
-                value = data_dict[key]
-                pool_entry = self._telemetry_widget_pool[i]
-                
-                # Only update label if key changed
-                if pool_entry['key'] != key:
-                    pool_entry['label'].setText(f"{key}:")
-                    pool_entry['key'] = key
-                
-                # Always update value (this is the fast path)
-                pool_entry['value'].setText(f"{value}")
+        for i in range(min(num_items, self._max_telemetry_rows)):
+            key = data_keys[i]
+            value = data_dict[key]
+            pool_entry = self._telemetry_widget_pool[i]
+            
+            # Only update label if key changed
+            if pool_entry['key'] != key:
+                pool_entry['label'].setText(f"{key}:")
+                pool_entry['key'] = key
                 pool_entry['row'].show()
-            else:
-                # Hide unused rows
-                self._telemetry_widget_pool[i]['row'].hide()
-                self._telemetry_widget_pool[i]['key'] = None
+            
+            # Always update value (this is the fast path)
+            value_str = str(value)
+            if pool_entry.get('last_value') != value_str:
+                pool_entry['value'].setText(value_str)
+                pool_entry['last_value'] = value_str
     
     def clearLayout(self, layout):
         """Helper method to clear a layout recursively."""

@@ -20,10 +20,17 @@ class GaugeWidget(QWidget):
         self.throttle = 0  # Add throttle property with default value 0
         self.custom_center_value = None  # Custom value to display in center (e.g., gear)
         self.setMinimumSize(150, 150)
+        
+        # Qt optimizations
+        self.setAttribute(Qt.WA_OpaquePaintEvent)  # No need to erase background
+        self.setAttribute(Qt.WA_NoSystemBackground)  # We draw everything ourselves
+        self.setUpdatesEnabled(True)
     
     def setValue(self, value):
         """Set the current value of the gauge."""
         self.current_value = max(0, min(self.max_value, value))
+        # Use repaint() instead of update() for immediate rendering
+        # Qt will batch these automatically
         self.update()
     
     def getValue(self):
@@ -67,7 +74,13 @@ class GaugeWidget(QWidget):
     def paintEvent(self, event):
         """Render the gauge on screen."""
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
+        # Use minimal rendering hints for speed
+        painter.setRenderHint(QPainter.Antialiasing, False)
+        painter.setRenderHint(QPainter.TextAntialiasing, True)  # Keep text smooth
+        painter.setRenderHint(QPainter.SmoothPixmapTransform, False)
+        
+        # Only paint the dirty region
+        painter.setClipRect(event.rect())
         
         # Calculate the gauge dimensions
         rect = self.rect()

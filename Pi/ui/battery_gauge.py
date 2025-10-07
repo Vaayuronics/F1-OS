@@ -38,7 +38,10 @@ class BatteryGaugeWidget(QWidget):
     def paintEvent(self, event):
         """Render the battery gauge on screen."""
         painter = QPainter(self)
-        painter.setRenderHint(QPainter.Antialiasing)
+        # Optimize rendering hints
+        painter.setRenderHint(QPainter.Antialiasing, False)
+        painter.setRenderHint(QPainter.TextAntialiasing, True)
+        painter.setClipRect(event.rect())  # Only paint dirty region
         
         # Calculate dimensions
         rect = self.rect()
