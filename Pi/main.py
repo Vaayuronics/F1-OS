@@ -6,22 +6,24 @@ import sys
 import signal
 import queue
 import os
+import platform
 import ui.dashboard as dash
 #from devices.light_manager import LightManager
 #from devices.button import Button
 
-# Enable GPU acceleration on Raspberry Pi
-# Set Qt platform to use OpenGL ES (hardware accelerated)
-os.environ['QT_QPA_PLATFORM'] = 'eglfs'  # Use EGL for fullscreen with GPU
-# Alternative: 'xcb' for X11 window manager, but 'eglfs' is faster
-# os.environ['QT_QPA_PLATFORM'] = 'xcb'
-
-# Force Qt to use OpenGL ES 2.0 (Raspberry Pi GPU)
-os.environ['QT_QUICK_BACKEND'] = 'software'  # Use software rendering as fallback if needed
-os.environ['QT_QPA_EGLFS_ALWAYS_SET_MODE'] = '1'  # Ensure mode is set
-
-# Enable GPU rendering for widgets
-os.environ['QSG_RENDER_LOOP'] = 'threaded'  # Use threaded rendering loop
+# Enable GPU acceleration on Raspberry Pi (only when running on Linux/Pi)
+# These settings enable hardware-accelerated rendering through the GPU
+if platform.system() == 'Linux':
+    # Use X11 with GPU acceleration (compatible with standard QWidgets)
+    # This avoids the "painter not active" errors while still using GPU
+    os.environ.setdefault('QT_QPA_PLATFORM', 'xcb')  # X11 with hardware acceleration
+    
+    # Enable GPU rendering
+    os.environ.setdefault('QT_XCB_GL_INTEGRATION', 'xcb_egl')  # Use EGL with X11
+    
+    # Uncomment below for fullscreen EGLFS mode (requires exclusive display access)
+    # os.environ['QT_QPA_PLATFORM'] = 'eglfs'
+    # os.environ['QT_QPA_EGLFS_ALWAYS_SET_MODE'] = '1'
 
 pico = None
 arduino = None

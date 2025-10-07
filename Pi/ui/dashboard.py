@@ -1,8 +1,7 @@
 from PySide6.QtWidgets import (QMainWindow, QFrame, QSplitter, 
                               QSizePolicy, QWidget, QVBoxLayout, QLabel, QHBoxLayout, QMessageBox, QApplication, QScrollArea)
 from PySide6.QtCore import Qt, QSettings, QSize, Signal, QTimer
-from PySide6.QtGui import QFont, QPixmap, QPainter, QSurfaceFormat
-from PySide6.QtOpenGLWidgets import QOpenGLWidget
+from PySide6.QtGui import QFont, QPixmap, QPainter
 from ui.gauge import GaugeWidget
 from ui.car2d import Car2DWidget
 from ui.battery_gauge import BatteryGaugeWidget
@@ -194,11 +193,9 @@ class F1Dashboard(QMainWindow):
             self.app.setOrganizationName("F1-OS")
             
             # Enable OpenGL hardware acceleration for Raspberry Pi
-            # Configure OpenGL surface format for better performance
-            fmt = QSurfaceFormat()
-            fmt.setSamples(4)  # 4x MSAA for antialiasing
-            fmt.setSwapInterval(1)  # Enable VSync
-            QSurfaceFormat.setDefaultFormat(fmt)
+            # Note: Using native graphics system with Qt's raster engine
+            # The GPU acceleration comes from the QT_QPA_PLATFORM env var set in main.py
+            # OpenGL surface format is not needed for standard QWidgets with raster painting
         else:
             self.app = QApplication.instance()
             
