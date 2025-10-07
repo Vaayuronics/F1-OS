@@ -1,5 +1,5 @@
-#from devices.testerial import JSONSerialReader
-#import engine.soundsys as sound
+from devices.testerial import JSONSerialReader
+import engine.soundsys as sound
 import time
 import threading
 import sys
@@ -8,8 +8,8 @@ import queue
 import os
 import platform
 import ui.dashboard as dash
-#from devices.light_manager import LightManager
-#from devices.button import Button
+from devices.light_manager import LightManager
+from devices.button import Button
 
 # Enable GPU acceleration on Raspberry Pi (only when running on Linux/Pi)
 # These settings enable hardware-accelerated rendering through the GPU
@@ -20,10 +20,10 @@ if platform.system() == 'Linux':
 
 pico = None
 arduino = None
-#lights = LightManager([16, 6, 5, 7, 24, 23, 22, 27, 17], 
-#["Green 1", "Green 2", "Green 3", "Green 4", "Blue 1", "Blue 2", "Yellow", "Orange", "Red"])
-#gear_up = Button(13, "Gear Up")
-#gear_down = Button(19, "Gear Down")
+lights = LightManager([16, 6, 5, 7, 24, 23, 22, 27, 17], 
+["Green 1", "Green 2", "Green 3", "Green 4", "Blue 1", "Blue 2", "Yellow", "Orange", "Red"])
+gear_up = Button(13, "Gear Up")
+gear_down = Button(19, "Gear Down")
 cur_gear = 0 # Supposedly int operations are atomic in python so this should be fine without a lock
 dashboard = None
 
@@ -538,9 +538,4 @@ def boot():
     sys.exit(exit_code)
 
 if __name__ == "__main__":
-    #boot()
-    dashboard = dash.F1Dashboard("ui/dashboard_settings.ini")
-    dashboard.set_data_source(get_ui_data)
-    dashboard.set_interrupted_event(interrupted)
-    dashboard.enable_fullscreen()
-    exit_code = dashboard.run()
+    boot()
