@@ -103,10 +103,7 @@ def hardware_loop():
         try:
             data = None
             
-            # Get hardware data
-            with hardware_data_lock:
-                if hardware_data:
-                    data = hardware_data.copy()
+            data = hardware_data
 
             # Update RPM lights
             update_rpm_lights(data.get('RPM', 0))
@@ -227,30 +224,24 @@ def process_data(pico_data, arduino_data):
     # Get current state from existing data for persistent values
     prev_speed = 0
     prev_time = 0
-    with ui_data_lock:
-        if ui_data:
-            prev_speed = ui_data.get('Prev Speed', 0)
-            prev_time = ui_data.get('Prev Time', 0)
-            # Copy persistent flags to new data
-            new_ui_data['Shift Emulation'] = ui_data.get('Shift Emulation', False)
-            new_ui_data['Headlights'] = ui_data.get('Headlights', False)
-            new_ui_data['Hazards'] = ui_data.get('Hazards', False)
-            new_ui_data['Auto Turn Signal'] = ui_data.get('Auto Turn Signal', False)
-            new_ui_data['DRS'] = ui_data.get('DRS', False)
-            new_ui_data['Started'] = ui_data.get('Started', False)
-            new_ui_data['Engine Mute'] = ui_data.get('Engine Mute', False)
-            new_ui_data['Music Mute'] = ui_data.get('Music Mute', False)
-            new_ui_data['Tune'] = ui_data.get('Tune', 0)
+    prev_speed = ui_data.get('Prev Speed', 0)
+    prev_time = ui_data.get('Prev Time', 0)
+    # Copy persistent flags to new data
+    new_ui_data['Shift Emulation'] = ui_data.get('Shift Emulation', False)
+    new_ui_data['Headlights'] = ui_data.get('Headlights', False)
+    new_ui_data['Hazards'] = ui_data.get('Hazards', False)
+    new_ui_data['Auto Turn Signal'] = ui_data.get('Auto Turn Signal', False)
+    new_ui_data['DRS'] = ui_data.get('DRS', False)
+    new_ui_data['Started'] = ui_data.get('Started', False)
+    new_ui_data['Engine Mute'] = ui_data.get('Engine Mute', False)
+    new_ui_data['Music Mute'] = ui_data.get('Music Mute', False)
+    new_ui_data['Tune'] = ui_data.get('Tune', 0)
     
-    with sound_data_lock:
-        if sound_data:
-            new_sound_data['Porche'] = sound_data.get('Porche', False)
-            new_sound_data['Pause'] = sound_data.get('Pause', False)
-    
-    with hardware_data_lock:
-        if hardware_data:
-            new_hardware_data['Lights'] = hardware_data.get('Lights', 'Off')
-    
+    new_sound_data['Porche'] = sound_data.get('Porche', False)
+    new_sound_data['Pause'] = sound_data.get('Pause', False)
+
+    new_hardware_data['Lights'] = hardware_data.get('Lights', 'Off')
+
     # Process pico data
     if pico_data:
         '''User button inputs'''
@@ -400,18 +391,11 @@ def process_data(pico_data, arduino_data):
             new_ui_data['Prev Speed'] = speed
             new_ui_data['Prev Time'] = time.time()
     
-    # Update shared data with minimal lock time
-    if new_ui_data:
-        with ui_data_lock:
-            ui_data.update(new_ui_data)
+    ui_data.update(new_ui_data)
     
-    if new_hardware_data:
-        with hardware_data_lock:
-            hardware_data.update(new_hardware_data)
+    hardware_data.update(new_hardware_data)
     
-    if new_sound_data:
-        with sound_data_lock:
-            sound_data.update(new_sound_data)
+    sound_data.update(new_sound_data)
 
 def lights_boot_anim():
     time.sleep(3)
