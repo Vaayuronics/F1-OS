@@ -14,16 +14,9 @@ import ui.dashboard as dash
 # Enable GPU acceleration on Raspberry Pi (only when running on Linux/Pi)
 # These settings enable hardware-accelerated rendering through the GPU
 if platform.system() == 'Linux':
-    # Use X11 with GPU acceleration (compatible with standard QWidgets)
-    # This avoids the "painter not active" errors while still using GPU
-    os.environ.setdefault('QT_QPA_PLATFORM', 'xcb')  # X11 with hardware acceleration
-    
-    # Enable GPU rendering
-    os.environ.setdefault('QT_XCB_GL_INTEGRATION', 'xcb_egl')  # Use EGL with X11
-    
-    # Uncomment below for fullscreen EGLFS mode (requires exclusive display access)
-    # os.environ['QT_QPA_PLATFORM'] = 'eglfs'
-    # os.environ['QT_QPA_EGLFS_ALWAYS_SET_MODE'] = '1'
+    # Use X11 with GPU acceleration (more compatible with Qt widgets)
+    os.environ.setdefault('QT_QPA_PLATFORM', 'xcb')
+    os.environ.setdefault('QT_XCB_GL_INTEGRATION', 'xcb_egl')
 
 pico = None
 arduino = None
