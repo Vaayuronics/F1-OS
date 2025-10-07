@@ -73,20 +73,16 @@ def update_rpm_lights(rpm):
     """Update lights based on RPM value."""
     global lights
     lights_count = len(lights.lights)
-    rpm_per_light = dash.MAX_RPM / lights_count
-    
-    # Calculate how many lights should be on based on current RPM
-    lights_to_activate = int(rpm / rpm_per_light)
+    rpm_per_light = (dash.MAX_RPM - 100) / lights_count
     
     for i in range(lights_count):
-        if i < lights_to_activate:
+        if rpm >= i * rpm_per_light:
             lights.turn_on(i)
         else:
             lights.turn_off(i)
             
-    # Flash the last light if over max RPM
     if rpm > dash.MAX_RPM:
-        lights.toggle(lights_count - 1)
+        lights.toggle(lights_count - 1)  # Flash the last light if over
 
 def get_ui_data():
     """Get latest UI data without blocking."""
