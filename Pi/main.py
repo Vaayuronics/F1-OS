@@ -138,7 +138,6 @@ def hardware_loop():
                     # Emergency stop throttle
                     pass
             
-            time.sleep(0.01)
         except Exception as e:
             print(f"[hardware_loop] Error: {e}")
             if interrupted.is_set():
