@@ -1,3 +1,5 @@
+#!/bin/bash
+
 cd /home/kp101/Desktop/F1-OS/Pi/
 
 # Create logging directory if it doesn't exist
@@ -17,6 +19,21 @@ cat /proc/cpuinfo | grep "Model" >> "$LOG_FILE"
 vcgencmd get_mem gpu >> "$LOG_FILE"
 vcgencmd measure_temp >> "$LOG_FILE"
 echo "" >> "$LOG_FILE"
+
+# Cleanup function to kill monitoring process
+cleanup() {
+    echo "Stopping monitoring..."
+    if [ ! -z "$MONITOR_PID" ]; then
+        kill $MONITOR_PID 2>/dev/null
+        wait $MONITOR_PID 2>/dev/null
+    fi
+    echo "Stopped: $(date)" >> "$LOG_FILE"
+    echo "Performance log saved to: $LOG_FILE"
+    exit 0
+}
+
+# Trap EXIT, SIGINT, SIGTERM to ensure cleanup runs
+trap cleanup EXIT INT TERM
 
 # Start background monitoring (samples every 2 seconds)
 (
@@ -50,8 +67,4 @@ git pull
 # GPU acceleration works through the active compositor
 python main.py
 
-# Stop monitoring when app exits
-kill $MONITOR_PID 2>/dev/null
-
-echo "Stopped: $(date)" >> "$LOG_FILE"
-echo "Performance log saved to: $LOG_FILE"
+# Cleanup will be called automatically via trap

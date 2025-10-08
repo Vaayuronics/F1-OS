@@ -390,6 +390,7 @@ def process_data(pico_data, arduino_data):
                     volume = max(min(knobs['Engine Vol'].get('Count', 0), 100), 0)
                     new_sound_data['Engine Volume'] = volume
                     new_ui_data['Engine Volume'] = volume
+                    print(f"[DEBUG] Engine Volume: {volume}")
             
             # Music Volume
             if 'Music Vol' in knobs:
@@ -406,6 +407,7 @@ def process_data(pico_data, arduino_data):
                     volume = max(min(knobs['Music Vol'].get('Count', 0), 100), 0)
                     new_sound_data['Music Volume'] = volume
                     new_ui_data['Music Volume'] = volume
+                    print(f"[DEBUG] Music Volume: {volume}")
             
             # Engine Tune
             if 'Engine Tune' in knobs:
@@ -416,6 +418,7 @@ def process_data(pico_data, arduino_data):
                 tune = max(min(knobs['Engine Tune'].get('Count', 0), 100), 0)
                 # Convert to 0-1 range for UI (dashboard expects 0-1, not 0-100)
                 new_ui_data['Engine Tune'] = tune / 100.0
+                print(f"[DEBUG] Engine Tune: {tune / 100.0}")
     
     # Process arduino data
     if arduino_data:

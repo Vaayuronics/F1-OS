@@ -445,19 +445,8 @@ class F1Dashboard(QMainWindow):
         """Pull data from external source and apply it (runs on UI thread via QTimer)."""
         if self.external_data_source:
             try:
-                # Drain queue - only process the LATEST data to avoid lag
-                # This prevents "catching up" behavior
-                data = None
-                attempts = 0
-                while attempts < 10:  # Drain up to 10 items, keep only latest
-                    new_data = self.external_data_source()
-                    if new_data:
-                        data = new_data
-                        attempts += 1
-                    else:
-                        break
-                
-                # Apply only the latest data
+                # Get latest data (main.py already handles queue prioritization)
+                data = self.external_data_source()
                 if data:
                     self._apply_data_dict(data)
             except RuntimeError:
@@ -507,9 +496,11 @@ class F1Dashboard(QMainWindow):
             self.setBattery(data['Battery'])
             data.pop('Battery')
         if 'Engine Volume' in data:
+            print(f"[DEBUG UI] Setting Engine Volume: {data['Engine Volume']}")
             self.setEngineVolume(data['Engine Volume'])
             data.pop('Engine Volume')
         if 'Music Volume' in data:
+            print(f"[DEBUG UI] Setting Music Volume: {data['Music Volume']}")
             self.setMusicVolume(data['Music Volume'])
             data.pop('Music Volume')
         if 'Alert Title' in data:
