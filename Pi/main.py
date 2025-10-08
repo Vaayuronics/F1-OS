@@ -248,7 +248,6 @@ def process_data(pico_data, arduino_data):
         started = persistent_state['Started']
         engine_mute = persistent_state['Engine Mute']
         music_mute = persistent_state['Music Mute']
-        tune = persistent_state['Tune']
         porche = persistent_state['Porche']
         pause = persistent_state['Pause']
         lights_state = persistent_state['Lights']
