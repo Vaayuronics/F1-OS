@@ -12,6 +12,17 @@ import ui.dashboard as dash
 from devices.light_manager import LightManager
 from devices.button import Button
 
+# Enable GPU acceleration for Qt (if not set in environment)
+if not os.environ.get('QT_QPA_PLATFORM'):
+    # Try EGLFS first (direct GPU rendering, best performance)
+    if os.path.exists('/dev/dri/card0'):
+        os.environ['QT_QPA_PLATFORM'] = 'eglfs'
+        os.environ['QT_QPA_EGLFS_INTEGRATION'] = 'eglfs_kms'
+        print("[Main] GPU detected, using EGLFS for hardware acceleration")
+    else:
+        print("[Main] WARNING: No GPU device found at /dev/dri/card0")
+        print("[Main] See Pi/GPU_SETUP.md for GPU acceleration setup")
+
 pico = None
 arduino = None
 lights = LightManager([16, 6, 5, 7, 24, 23, 22, 27, 17], 
@@ -23,11 +34,12 @@ dashboard = None
 
 MAX_THROTTLE_DEG = 135
 
-# Use multiprocessing queues for inter-process communication (avoids GIL)
+# Use multiprocessing Manager dict for inter-process communication (avoids GIL)
 # This allows UI to run on its own CPU core without being blocked by other threads
-ui_data_queue = None  # Will be initialized in main
-hardware_data_queue = None
-sound_data_queue = None
+# Using dict instead of queue ensures we ALWAYS get latest data, never old queued data
+ui_data_dict = None  # Will be initialized in main as Manager().dict()
+hardware_data_dict = None
+sound_data_dict = None
 
 # Persistent state dictionary with lock
 persistent_state = {
@@ -87,11 +99,10 @@ def update_rpm_lights(rpm):
         lights.toggle(lights_count - 1)  # Flash the last light if over
 
 def get_ui_data():
-    """Get latest UI data without blocking."""
-    try:
-        return ui_data_queue.get_nowait()
-    except queue.Empty:
-        return None
+    """Get latest UI data as a regular dict (copy from shared dict)."""
+    if ui_data_dict:
+        return dict(ui_data_dict)  # Return copy to avoid issues
+    return None
 
 def hardware_update_loop(interrupted_event):
     """Continuously poll hardware devices - runs in separate thread within hardware process"""
@@ -100,6 +111,12 @@ def hardware_update_loop(interrupted_event):
         try:
             pico_data = pico.poll()
             arduino_data = arduino.poll()
+            
+            if pico_data:
+                print(f"[DEBUG] Pico data: {pico_data}")
+            if arduino_data:
+                print(f"[DEBUG] Arduino data: {arduino_data}")
+            
             process_data(pico_data, arduino_data)
             time.sleep(0.05)  # 20Hz polling - now won't block UI thanks to separate process
         except Exception as e:
@@ -111,19 +128,20 @@ def hardware_update_loop(interrupted_event):
 
 def hardware_loop(interrupted_event):
     '''Complete operations on hardware data and update RPM lights - runs in separate thread within hardware process'''
-    global arduino
+    global arduino, hardware_data_dict
 
     lights_boot_anim()
     
     while not interrupted_event.is_set():
         try:
-            # Wait for new data with timeout
-            try:
-                data = hardware_data_queue.get(timeout=0.1)
+            # Get latest data from shared dict
+            if hardware_data_dict:
+                data = dict(hardware_data_dict)  # Copy to regular dict
                 
                 # Update RPM lights on every data update
                 rpm = data.get('RPM', 0)
-                update_rpm_lights(rpm)
+                if rpm > 0:
+                    update_rpm_lights(rpm)
                 
                 # Process hardware commands
                 #TODO: Process hardware data
@@ -153,9 +171,8 @@ def hardware_loop(interrupted_event):
                 if data.get('STOP', False):
                     # Emergency stop throttle
                     pass
-                    
-            except queue.Empty:
-                continue  # No new data, keep waiting
+            
+            time.sleep(0.05)  # 20Hz update rate
             
         except Exception as e:
             print(f"[hardware_loop] Error: {e}")
@@ -166,14 +183,16 @@ def hardware_loop(interrupted_event):
 
 def audio_loop(interrupted_event):
     '''Play the sounds chunks and return - runs in separate thread within audio process'''
+    global sound_data_dict
+    
     sound.load_tracks()
     sound.play_startup_sound()
     
     while not interrupted_event.is_set():
         try:
-            # Wait for new data with timeout
-            try:
-                data = sound_data_queue.get(timeout=0.1)
+            # Get latest data from shared dict
+            if sound_data_dict:
+                data = dict(sound_data_dict)  # Copy to regular dict
                 
                 if data.get('Start', False):
                     sound.play_f1_start()
@@ -191,9 +210,8 @@ def audio_loop(interrupted_event):
                     sound.play_music(data.get('Music Volume', 0))
                 
                 sound.play_engine(data.get('Accel', False), data.get('Speed', 0), data.get('Engine Volume', 0))
-                
-            except queue.Empty:
-                continue  # No new data, keep waiting
+            
+            time.sleep(0.05)  # 20Hz update rate
             
         except Exception as e:
             print(f"[audio_loop] Error: {e}")
@@ -445,40 +463,15 @@ def process_data(pico_data, arduino_data):
                 persistent_state['Prev Speed'] = speed
                 persistent_state['Prev Time'] = time.time()
     
-    # Push to queues (replaces old data if queue is full)
-    # Always prioritize latest data by removing old first
+    # Update shared dicts atomically (always latest data, no queueing)
     if new_ui_data:
-        if ui_data_queue.full():
-            try:
-                ui_data_queue.get_nowait()  # Remove old data first
-            except queue.Empty:
-                pass
-        try:
-            ui_data_queue.put_nowait(new_ui_data)
-        except queue.Full:
-            pass  # Should never happen after get_nowait
+        ui_data_dict.update(new_ui_data)
     
     if new_hardware_data:
-        if hardware_data_queue.full():
-            try:
-                hardware_data_queue.get_nowait()  # Remove old data first
-            except queue.Empty:
-                pass
-        try:
-            hardware_data_queue.put_nowait(new_hardware_data)
-        except queue.Full:
-            pass
+        hardware_data_dict.update(new_hardware_data)
     
     if new_sound_data:
-        if sound_data_queue.full():
-            try:
-                sound_data_queue.get_nowait()  # Remove old data first
-            except queue.Empty:
-                pass
-        try:
-            sound_data_queue.put_nowait(new_sound_data)
-        except queue.Full:
-            pass
+        sound_data_dict.update(new_sound_data)
 
 def lights_boot_anim():
     time.sleep(3)
@@ -490,14 +483,14 @@ def lights_boot_anim():
         time.sleep(0.3)
     lights.turn_off_all()
 
-def hardware_process(interrupted_event, ui_queue, hw_queue, sound_queue, state_lock):
+def hardware_process(interrupted_event, ui_dict, hw_dict, sound_dict, state_lock):
     """Main hardware process - runs on separate CPU core, avoiding GIL with UI"""
-    global pico, arduino, lights, ui_data_queue, hardware_data_queue, sound_data_queue, persistent_state_lock
+    global pico, arduino, lights, ui_data_dict, hardware_data_dict, sound_data_dict, persistent_state_lock
     
     # Set up process-local variables
-    ui_data_queue = ui_queue
-    hardware_data_queue = hw_queue
-    sound_data_queue = sound_queue
+    ui_data_dict = ui_dict
+    hardware_data_dict = hw_dict
+    sound_data_dict = sound_dict
     persistent_state_lock = state_lock
     
     print("[Hardware Process] Starting...")
@@ -542,11 +535,11 @@ def hardware_process(interrupted_event, ui_queue, hw_queue, sound_queue, state_l
     time.sleep(0.5)
     print("[Hardware Process] Exited")
 
-def audio_process(interrupted_event, sound_queue):
+def audio_process(interrupted_event, sound_dict):
     """Main audio process - runs on separate CPU core"""
-    global sound_data_queue
+    global sound_data_dict
     
-    sound_data_queue = sound_queue
+    sound_data_dict = sound_dict
     
     print("[Audio Process] Starting...")
     
@@ -571,19 +564,20 @@ def audio_process(interrupted_event, sound_queue):
 def boot():
     print("Booting up system with multiprocessing (UI on separate CPU core)...")
 
-    global dashboard, interrupted, ui_data_queue, hardware_data_queue, sound_data_queue, persistent_state_lock
+    global dashboard, interrupted, ui_data_dict, hardware_data_dict, sound_data_dict, persistent_state_lock
     
     # Initialize multiprocessing primitives
     interrupted = multiprocessing.Event()
-    ui_data_queue = multiprocessing.Queue(maxsize=5)
-    hardware_data_queue = multiprocessing.Queue(maxsize=5)
-    sound_data_queue = multiprocessing.Queue(maxsize=5)
+    manager = multiprocessing.Manager()
+    ui_data_dict = manager.dict()
+    hardware_data_dict = manager.dict()
+    sound_data_dict = manager.dict()
     persistent_state_lock = multiprocessing.Lock()
     
     # Start hardware process (runs on separate CPU core - no GIL conflict!)
     hw_process = multiprocessing.Process(
         target=hardware_process,
-        args=(interrupted, ui_data_queue, hardware_data_queue, sound_data_queue, persistent_state_lock),
+        args=(interrupted, ui_data_dict, hardware_data_dict, sound_data_dict, persistent_state_lock),
         daemon=False
     )
     hw_process.start()
@@ -592,7 +586,7 @@ def boot():
     # Start audio process (runs on separate CPU core)
     audio_proc = multiprocessing.Process(
         target=audio_process,
-        args=(interrupted, sound_data_queue),
+        args=(interrupted, sound_data_dict),
         daemon=False
     )
     audio_proc.start()

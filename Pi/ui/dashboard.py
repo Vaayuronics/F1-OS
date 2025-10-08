@@ -10,7 +10,7 @@ import os
 import sys
 
 MAX_RPM = 14000 # Max RPM for the gauge, actual should go to about 14.5k
-UPDATE_MS = 33  # Update interval in milliseconds (30Hz for smoother updates)
+UPDATE_MS = 50  # Update interval in milliseconds (20Hz - reduced from 30Hz to lower CPU usage on Pi)
 
 class NotificationFrame(QWidget):
     """Individual notification frame that auto-destroys after duration."""
@@ -445,7 +445,7 @@ class F1Dashboard(QMainWindow):
         """Pull data from external source and apply it (runs on UI thread via QTimer)."""
         if self.external_data_source:
             try:
-                # Get latest data (main.py already handles queue prioritization)
+                # Get latest data from shared dict (always current, never old)
                 data = self.external_data_source()
                 if data:
                     self._apply_data_dict(data)
