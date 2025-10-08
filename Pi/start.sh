@@ -22,14 +22,17 @@ echo "" >> "$LOG_FILE"
 (
     while true; do
         echo "--- $(date +"%H:%M:%S") ---" >> "$LOG_FILE"
-        # CPU usage per core
-        mpstat -P ALL 1 1 | grep -E "CPU|Average" >> "$LOG_FILE"
+        # CPU usage (simple vmstat output)
+        vmstat 1 2 | tail -1 >> "$LOG_FILE"
         # Memory usage
         free -m | grep "Mem:" >> "$LOG_FILE"
-        # GPU temp
+        # GPU temp and usage
         vcgencmd measure_temp >> "$LOG_FILE"
+        vcgencmd measure_clock arm >> "$LOG_FILE"
         # Process-specific stats (only when app is running)
         if pgrep -f "python main.py" > /dev/null; then
+            echo "Python processes:" >> "$LOG_FILE"
+            ps aux | grep "python main.py" | grep -v grep >> "$LOG_FILE"
             top -b -n 1 -H -p $(pgrep -f "python main.py" | head -1) | head -20 >> "$LOG_FILE"
         fi
         echo "" >> "$LOG_FILE"
