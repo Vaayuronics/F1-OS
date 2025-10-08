@@ -12,12 +12,8 @@ import ui.dashboard as dash
 from devices.light_manager import LightManager
 from devices.button import Button
 
-# Enable GPU acceleration on Raspberry Pi (only when running on Linux/Pi)
-# These settings enable hardware-accelerated rendering through the GPU
-if platform.system() == 'Linux':
-    # Use X11 with GPU acceleration (more compatible with Qt widgets)
-    os.environ.setdefault('QT_QPA_PLATFORM', 'xcb')
-    os.environ.setdefault('QT_XCB_GL_INTEGRATION', 'xcb_egl')
+# GPU acceleration environment variables are now set in start.sh
+# to keep them scoped to just this application
 
 pico = None
 arduino = None

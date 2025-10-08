@@ -46,8 +46,9 @@ source venv/bin/activate
 git fetch
 git pull
 
-# Run the application (no sudo needed - GPIO permissions already set up)
-python main.py
+# Run the application with environment variables scoped to just this command
+# This prevents Qt settings from affecting other applications
+QT_QPA_PLATFORM=xcb QT_XCB_GL_INTEGRATION=xcb_egl python main.py
 
 # Stop monitoring when app exits
 kill $MONITOR_PID 2>/dev/null
