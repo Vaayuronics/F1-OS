@@ -12,9 +12,6 @@ import ui.dashboard as dash
 from devices.light_manager import LightManager
 from devices.button import Button
 
-# GPU acceleration environment variables are now set in start.sh
-# to keep them scoped to just this application
-
 pico = None
 arduino = None
 lights = LightManager([16, 6, 5, 7, 24, 23, 22, 27, 17], 

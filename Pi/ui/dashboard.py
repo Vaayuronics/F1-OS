@@ -12,57 +12,64 @@ import sys
 MAX_RPM = 14000 # Max RPM for the gauge, actual should go to about 14.5k
 UPDATE_MS = 33  # Update interval in milliseconds (30Hz for smoother updates)
 
-#TODO: Debug the update telemetry to find out where the bottle neck is
-
-class PopupNotification(QWidget):
-    """Square popup dialog for temporary notifications with title and subtitle."""
+class NotificationFrame(QWidget):
+    """Individual notification frame that auto-destroys after duration."""
     
-    def __init__(self, parent=None):
+    # Signal emitted when notification is about to be destroyed
+    notification_closed = Signal(object)
+    
+    def __init__(self, title, subtitle="", duration_ms=2000, 
+                 background_color="#2D2D2D", title_color="white", 
+                 subtitle_color="#CCCCCC", parent=None):
         super().__init__(parent)
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setFixedSize(400, 400)  # Square popup - doubled in size
+        self.setFixedSize(400, 400)  # Square notification
         
         # Create main layout
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(5, 5, 5, 5)  # Reduced padding
+        layout.setContentsMargins(5, 5, 5, 5)
         layout.setSpacing(10)
         layout.setAlignment(Qt.AlignCenter)
         
         # Create container frame for styling
         self.container = QFrame()
-        self.container.setStyleSheet("""
-            QFrame {
-                background-color: #2D2D2D;
+        self.container.setStyleSheet(f"""
+            QFrame {{
+                background-color: {background_color};
                 border: 2px solid #555555;
                 border-radius: 15px;
-            }
+            }}
         """)
         
         # Container layout
         container_layout = QVBoxLayout(self.container)
-        container_layout.setContentsMargins(8, 8, 8, 8)  # Reduced padding
+        container_layout.setContentsMargins(8, 8, 8, 8)
         container_layout.setSpacing(10)
         container_layout.setAlignment(Qt.AlignCenter)
         
         # Title label (large font)
-        self.title_label = QLabel()
+        self.title_label = QLabel(title)
         self.title_label.setAlignment(Qt.AlignCenter)
         self.title_label.setWordWrap(True)
         title_font = QFont()
         title_font.setPointSize(16)
         title_font.setBold(True)
         self.title_label.setFont(title_font)
-        self.title_label.setStyleSheet("color: white; background-color: transparent;")
+        self.title_label.setStyleSheet(f"color: {title_color}; background-color: transparent;")
         
         # Subtitle label (smaller font)
-        self.subtitle_label = QLabel()
+        self.subtitle_label = QLabel(subtitle)
         self.subtitle_label.setAlignment(Qt.AlignCenter)
         self.subtitle_label.setWordWrap(True)
         subtitle_font = QFont()
         subtitle_font.setPointSize(10)
         self.subtitle_label.setFont(subtitle_font)
-        self.subtitle_label.setStyleSheet("color: #CCCCCC; background-color: transparent;")
+        self.subtitle_label.setStyleSheet(f"color: {subtitle_color}; background-color: transparent;")
+        
+        # Hide subtitle if empty
+        if not subtitle:
+            self.subtitle_label.hide()
         
         # Add labels to container
         container_layout.addWidget(self.title_label)
@@ -71,114 +78,106 @@ class PopupNotification(QWidget):
         # Add container to main layout
         layout.addWidget(self.container)
         
-        # Timer for auto-hide
-        self.hide_timer = QTimer()
-        self.hide_timer.setSingleShot(True)
-        self.hide_timer.timeout.connect(self._on_hide_timeout)
+        # Timer for auto-destroy
+        self.destroy_timer = QTimer()
+        self.destroy_timer.setSingleShot(True)
+        self.destroy_timer.timeout.connect(self._on_destroy_timeout)
+        self.destroy_timer.start(duration_ms)
         
-        # Queue for handling multiple notifications
-        self.notification_queue = []
-        self.is_showing = False
-        
-        self.hide()  # Start hidden
+        self.show()
+        self.raise_()
+        self.activateWindow()
     
-    def show_notification(self, title, subtitle="", duration_ms=2000, background_color="#2D2D2D", title_color="white", subtitle_color="#CCCCCC"):
+    def _on_destroy_timeout(self):
+        """Called when the destroy timer expires."""
+        self.notification_closed.emit(self)
+        self.deleteLater()
+
+
+class NotificationManager(QWidget):
+    """Manages multiple stacked notification frames."""
+    
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAttribute(Qt.WA_TransparentForMouseEvents)  # Don't block clicks
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
+        self.setAttribute(Qt.WA_TranslucentBackground)
+        
+        # Track active notifications (oldest first)
+        self.active_notifications = []
+        
+        # Spacing between notifications
+        self.notification_spacing = 10
+        
+        # Position from top of parent
+        self.top_margin = 20
+        
+        self.hide()  # Start hidden, show when first notification appears
+    
+    def show_notification(self, title, subtitle="", duration_ms=2000, 
+                         background_color="#2D2D2D", title_color="white", 
+                         subtitle_color="#CCCCCC"):
         """
-        Show the popup notification with custom content and duration.
+        Create and show a new notification frame.
         
         Args:
             title (str): Main title text (large font)
             subtitle (str): Subtitle text (smaller font), optional
-            duration_ms (int): Duration to show popup in milliseconds (default: 2000ms = 2 seconds)
-            background_color (str): Background color (default: dark gray)
-            title_color (str): Title text color (default: white)
-            subtitle_color (str): Subtitle text color (default: light gray)
+            duration_ms (int): Duration to show notification in milliseconds
+            background_color (str): Background color
+            title_color (str): Title text color
+            subtitle_color (str): Subtitle text color
         """
-        notification = {
-            'title': title,
-            'subtitle': subtitle,
-            'duration_ms': duration_ms,
-            'background_color': background_color,
-            'title_color': title_color,
-            'subtitle_color': subtitle_color
-        }
+        # Create new notification frame
+        notification = NotificationFrame(
+            title=title,
+            subtitle=subtitle,
+            duration_ms=duration_ms,
+            background_color=background_color,
+            title_color=title_color,
+            subtitle_color=subtitle_color,
+            parent=self.parent()
+        )
         
-        # If currently showing a notification, queue this one
-        if self.is_showing:
-            self.notification_queue.append(notification)
-        else:
-            # Show immediately
-            self._display_notification(notification)
+        # Connect close signal
+        notification.notification_closed.connect(self._on_notification_closed)
+        
+        # Add to active list (append to end, oldest at front)
+        self.active_notifications.append(notification)
+        
+        # Reposition all notifications
+        self._reposition_notifications()
+        
+        # Show manager if hidden
+        if not self.isVisible():
+            self.show()
     
-    def _display_notification(self, notification):
-        """Internal method to actually display a notification."""
-        self.is_showing = True
+    def _on_notification_closed(self, notification):
+        """Called when a notification is closed/destroyed."""
+        if notification in self.active_notifications:
+            self.active_notifications.remove(notification)
         
-        # Stop any existing timer
-        if self.hide_timer.isActive():
-            self.hide_timer.stop()
+        # Reposition remaining notifications
+        self._reposition_notifications()
         
-        # Set text content
-        self.title_label.setText(notification['title'])
-        self.subtitle_label.setText(notification['subtitle'])
-        
-        # Update colors
-        self.container.setStyleSheet(f"""
-            QFrame {{
-                background-color: {notification['background_color']};
-                border: 2px solid #555555;
-                border-radius: 15px;
-            }}
-        """)
-        self.title_label.setStyleSheet(f"color: {notification['title_color']}; background-color: transparent;")
-        self.subtitle_label.setStyleSheet(f"color: {notification['subtitle_color']}; background-color: transparent;")
-        
-        # Hide subtitle if empty
-        if notification['subtitle']:
-            self.subtitle_label.show()
-        else:
-            self.subtitle_label.hide()
-        
-        # Center popup on parent if available
-        if self.parent():
-            parent_rect = self.parent().geometry()
-            popup_x = parent_rect.x() + (parent_rect.width() - self.width()) // 2
-            popup_y = parent_rect.y() + (parent_rect.height() - self.height()) // 2
-            self.move(popup_x, popup_y)
-        
-        # Show popup and start timer
-        self.show()
-        self.raise_()  # Bring to front
-        self.activateWindow()  # Ensure it gets focus and stays on top
-        
-        # Start timer for this notification
-        self.hide_timer.start(notification['duration_ms'])
+        # Hide manager if no more notifications
+        if not self.active_notifications:
+            self.hide()
     
-    def _on_hide_timeout(self):
-        """Called when the hide timer expires."""
-        self.hide()
-        self.is_showing = False
+    def _reposition_notifications(self):
+        """Reposition all active notifications in a vertical stack (oldest on top)."""
+        if not self.parent():
+            return
         
-        # Show next notification in queue if any
-        if self.notification_queue:
-            next_notification = self.notification_queue.pop(0)
-            self._display_notification(next_notification)
-    
-    def hide_popup(self):
-        """Hide the popup notification (for manual dismissal)."""
-        if self.hide_timer.isActive():
-            self.hide_timer.stop()
-        self.hide()
-        self.is_showing = False
+        parent_rect = self.parent().geometry()
+        center_x = parent_rect.x() + (parent_rect.width() - 400) // 2  # Center horizontally
         
-        # Show next notification in queue if any
-        if self.notification_queue:
-            next_notification = self.notification_queue.pop(0)
-            self._display_notification(next_notification)
-    
-    def set_size(self, width, height):
-        """Set custom popup size (default is 200x200 square)."""
-        self.setFixedSize(width, height)
+        current_y = parent_rect.y() + self.top_margin
+        
+        # Position from top to bottom (oldest first)
+        for notification in self.active_notifications:
+            notification.move(center_x, current_y)
+            current_y += notification.height() + self.notification_spacing
 
 class F1Dashboard(QMainWindow):
     """Main dashboard window that displays gauges and car visualization."""
@@ -423,8 +422,8 @@ class F1Dashboard(QMainWindow):
         self.engine_tune_value = 0.0
         self.regen_brake_value = 0.0
         
-        # Create popup notification widget
-        self.popup_notification = PopupNotification(self)
+        # Create notification manager
+        self.notification_manager = NotificationManager(self)
     
     def run(self):
         """Show the dashboard and run the application."""
@@ -723,12 +722,13 @@ class F1Dashboard(QMainWindow):
     
     def show_notification(self, title, subtitle="", duration_ms=2000, background_color="#2D2D2D", title_color="#FFFFFF", subtitle_color="#CCCCCC"):
         """
-        Show a temporary popup notification.
+        Show a temporary notification that stacks with other notifications.
+        Each notification is independent and will auto-destroy after its duration.
         
         Args:
             title (str): Main title text (large font)
             subtitle (str): Subtitle text (smaller font), optional
-            duration_ms (int): Duration to show popup in milliseconds (default: 2000ms = 2 seconds)
+            duration_ms (int): Duration to show notification in milliseconds (default: 2000ms = 2 seconds)
             background_color (str): Background color (default: dark gray)
             title_color (str): Title text color (default: white)
             subtitle_color (str): Subtitle text color (default: light gray)
@@ -737,7 +737,7 @@ class F1Dashboard(QMainWindow):
             dashboard.show_notification("HEADLIGHTS", "ON", 1500, "#1E4A2E", "white", "#90EE90")
             dashboard.show_notification("HAZARDS", "ACTIVATED", 2000, "#4A2E1E", "white", "#FFD700")
         """
-        self.popup_notification.show_notification(title, subtitle, duration_ms, background_color, title_color, subtitle_color)
+        self.notification_manager.show_notification(title, subtitle, duration_ms, background_color, title_color, subtitle_color)
     
     def setWheelRotation(self, angle_degrees):
         """Set the wheel rotation angle in degrees."""
