@@ -46,9 +46,9 @@ source venv/bin/activate
 git fetch
 git pull
 
-# Run the application with environment variables scoped to just this command
-# This prevents Qt settings from affecting other applications
-QT_QPA_PLATFORM=xcb QT_XCB_GL_INTEGRATION=xcb_egl python main.py
+# Run the application with Wayland (native to RPI OS and RPI Connect)
+# GPU acceleration works through Wayland compositor
+QT_QPA_PLATFORM=wayland python main.py
 
 # Stop monitoring when app exits
 kill $MONITOR_PID 2>/dev/null
