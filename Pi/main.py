@@ -46,12 +46,11 @@ persistent_state = {
     'Started': False,
     'Engine Mute': False,
     'Music Mute': False,
-    'Tune': 0,
     'Porche': False,
     'Pause': False,
     'Lights': 'Off',
-    'Prev Speed': 0,
-    'Prev Time': 0,
+    'Prev Speed': 0,  # Needed to calculate acceleration
+    'Prev Time': 0,   # Needed to calculate rate of change
 }
 persistent_state_lock = None  # Will be initialized as multiprocessing.Lock()
 
@@ -421,11 +420,10 @@ def process_data(pico_data, arduino_data):
                 if knobs['Engine Tune'].get('Pressed', False):
                     new_ui_data['Mode Switch'] = True
                 
+                # Knob returns absolute position (0-100), no need to store in persistent_state
                 tune = max(min(knobs['Engine Tune'].get('Count', 0), 100), 0)
-                with persistent_state_lock:
-                    persistent_state['Tune'] = tune
-                new_ui_data['Engine Tune'] = tune
-                new_ui_data['Tune'] = tune
+                # Convert to 0-1 range for UI (dashboard expects 0-1, not 0-100)
+                new_ui_data['Engine Tune'] = tune / 100.0
     
     # Process arduino data
     if arduino_data:

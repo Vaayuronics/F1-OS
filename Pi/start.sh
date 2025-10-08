@@ -43,8 +43,8 @@ source venv/bin/activate
 git fetch
 git pull
 
-# Run the application
-sudo -E python main.py
+# Run the application (no sudo needed - GPIO permissions already set up)
+python main.py
 
 # Stop monitoring when app exits
 kill $MONITOR_PID 2>/dev/null
