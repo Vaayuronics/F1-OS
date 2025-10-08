@@ -46,9 +46,9 @@ source venv/bin/activate
 git fetch
 git pull
 
-# Run the application with Wayland (native to RPI OS and RPI Connect)
-# GPU acceleration works through Wayland compositor
-QT_QPA_PLATFORM=wayland python main.py
+# Let Qt auto-detect the platform (works with both X11 and Wayland)
+# GPU acceleration works through the active compositor
+python main.py
 
 # Stop monitoring when app exits
 kill $MONITOR_PID 2>/dev/null
