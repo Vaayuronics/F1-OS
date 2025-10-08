@@ -496,20 +496,23 @@ def hardware_process(interrupted_event, ui_dict, hw_dict, sound_dict, state_lock
     print("[Hardware Process] Starting...")
     
     # Initialize hardware devices in this process
-    global pico, arduino, lights
-    pico = JSONSerialReader("/dev/pico")
-    arduino = JSONSerialReader("/dev/arduino")
-    lights = LightManager([16, 6, 5, 7, 24, 23, 22, 27, 17], 
-                         ["Green 1", "Green 2", "Green 3", "Green 4", "Blue 1", "Blue 2", "Yellow", "Orange", "Red"])
+    try:
+        pico = JSONSerialReader("/dev/pico")
+        arduino = JSONSerialReader("/dev/arduino")
+        lights = LightManager([16, 6, 5, 7, 24, 23, 22, 27, 17], 
+                             ["Green 1", "Green 2", "Green 3", "Green 4", "Blue 1", "Blue 2", "Yellow", "Orange", "Red"])
+    except Exception as e:
+        print(f"[Hardware Process] Error initializing devices: {e}")
+        return
     
     # Create local threading event for threads within this process
     local_interrupted = threading.Event()
     
-    # Start hardware threads within this process
-    hardware_update_thread = threading.Thread(target=hardware_update_loop, args=(local_interrupted,), daemon=True)
+    # Start hardware threads within this process (NOT daemon - we need to join them)
+    hardware_update_thread = threading.Thread(target=hardware_update_loop, args=(local_interrupted,), daemon=False)
     hardware_update_thread.start()
     
-    hardware_thread = threading.Thread(target=hardware_loop, args=(local_interrupted,), daemon=True)
+    hardware_thread = threading.Thread(target=hardware_loop, args=(local_interrupted,), daemon=False)
     hardware_thread.start()
     
     # Wait for shutdown signal from main process
@@ -521,19 +524,40 @@ def hardware_process(interrupted_event, ui_dict, hw_dict, sound_dict, state_lock
     print("[Hardware Process] Shutting down...")
     local_interrupted.set()
     
-    # Cleanup
-    if lights:
-        lights.turn_off_all()
-        lights.cleanup()
-    if pico:
-        pico.send({"command": "stop"})
-        pico.ser.close()
-    if arduino:
-        arduino.send({"command": "stop"})
-        arduino.ser.close()
+    # Wait for threads to exit (give them 3 seconds)
+    print("[Hardware Process] Waiting for threads to exit...")
+    hardware_update_thread.join(timeout=3)
+    hardware_thread.join(timeout=3)
     
-    time.sleep(0.5)
-    print("[Hardware Process] Exited")
+    if hardware_update_thread.is_alive():
+        print("[Hardware Process] WARNING: hardware_update_thread still alive")
+    if hardware_thread.is_alive():
+        print("[Hardware Process] WARNING: hardware_thread still alive")
+    
+    # Cleanup hardware
+    print("[Hardware Process] Cleaning up hardware...")
+    try:
+        if lights:
+            lights.turn_off_all()
+            lights.cleanup()
+    except Exception as e:
+        print(f"[Hardware Process] Error cleaning up lights: {e}")
+    
+    try:
+        if pico:
+            pico.send({"command": "stop"})
+            pico.ser.close()
+    except Exception as e:
+        print(f"[Hardware Process] Error closing pico: {e}")
+    
+    try:
+        if arduino:
+            arduino.send({"command": "stop"})
+            arduino.ser.close()
+    except Exception as e:
+        print(f"[Hardware Process] Error closing arduino: {e}")
+    
+    print("[Hardware Process] Exited cleanly")
 
 def audio_process(interrupted_event, sound_dict):
     """Main audio process - runs on separate CPU core"""
@@ -546,8 +570,8 @@ def audio_process(interrupted_event, sound_dict):
     # Create local threading event
     local_interrupted = threading.Event()
     
-    # Start audio thread within this process
-    audio_thread = threading.Thread(target=audio_loop, args=(local_interrupted,), daemon=True)
+    # Start audio thread within this process (NOT daemon - we need to join it)
+    audio_thread = threading.Thread(target=audio_loop, args=(local_interrupted,), daemon=False)
     audio_thread.start()
     
     # Wait for shutdown signal
@@ -558,8 +582,15 @@ def audio_process(interrupted_event, sound_dict):
     
     print("[Audio Process] Shutting down...")
     local_interrupted.set()
-    time.sleep(0.5)
-    print("[Audio Process] Exited")
+    
+    # Wait for thread to exit (give it 3 seconds)
+    print("[Audio Process] Waiting for audio thread to exit...")
+    audio_thread.join(timeout=3)
+    
+    if audio_thread.is_alive():
+        print("[Audio Process] WARNING: audio_thread still alive")
+    
+    print("[Audio Process] Exited cleanly")
 
 def boot():
     print("Booting up system with multiprocessing (UI on separate CPU core)...")
@@ -574,59 +605,102 @@ def boot():
     sound_data_dict = manager.dict()
     persistent_state_lock = multiprocessing.Lock()
     
-    # Start hardware process (runs on separate CPU core - no GIL conflict!)
-    hw_process = multiprocessing.Process(
-        target=hardware_process,
-        args=(interrupted, ui_data_dict, hardware_data_dict, sound_data_dict, persistent_state_lock),
-        daemon=False
-    )
-    hw_process.start()
-    print(f"[Main] Hardware process started (PID: {hw_process.pid})")
+    hw_process = None
+    audio_proc = None
     
-    # Start audio process (runs on separate CPU core)
-    audio_proc = multiprocessing.Process(
-        target=audio_process,
-        args=(interrupted, sound_data_dict),
-        daemon=False
-    )
-    audio_proc.start()
-    print(f"[Main] Audio process started (PID: {audio_proc.pid})")
-    
-    # Create dashboard in main process (gets its own CPU core!)
-    dashboard = dash.F1Dashboard("ui/dashboard_settings.ini")
-    
-    # Give dashboard access to data and shutdown event
-    dashboard.set_data_source(get_ui_data)
-    dashboard.set_interrupted_event(interrupted)
+    try:
+        # Start hardware process (runs on separate CPU core - no GIL conflict!)
+        hw_process = multiprocessing.Process(
+            target=hardware_process,
+            args=(interrupted, ui_data_dict, hardware_data_dict, sound_data_dict, persistent_state_lock),
+            daemon=False
+        )
+        hw_process.start()
+        print(f"[Main] Hardware process started (PID: {hw_process.pid})")
+        
+        # Start audio process (runs on separate CPU core)
+        audio_proc = multiprocessing.Process(
+            target=audio_process,
+            args=(interrupted, sound_data_dict),
+            daemon=False
+        )
+        audio_proc.start()
+        print(f"[Main] Audio process started (PID: {audio_proc.pid})")
+        
+        # Create dashboard in main process (gets its own CPU core!)
+        dashboard = dash.F1Dashboard("ui/dashboard_settings.ini")
+        
+        # Give dashboard access to data and shutdown event
+        dashboard.set_data_source(get_ui_data)
+        dashboard.set_interrupted_event(interrupted)
 
-    # Start dashboard (blocks until window closes) - runs smoothly on its own core
-    dashboard.enable_fullscreen()
-    print("[Main] Starting UI (runs on main process with dedicated CPU core)")
-    exit_code = dashboard.run()
+        # Start dashboard (blocks until window closes) - runs smoothly on its own core
+        dashboard.enable_fullscreen()
+        print("[Main] Starting UI (runs on main process with dedicated CPU core)")
+        exit_code = dashboard.run()
+        
+    except KeyboardInterrupt:
+        print("\n[Main] Keyboard interrupt received")
+        exit_code = 0
+    except Exception as e:
+        print(f"[Main] Error during execution: {e}")
+        import traceback
+        traceback.print_exc()
+        exit_code = 1
+    finally:
+        # CRITICAL: Ensure cleanup happens no matter what
+        print("[Main] Shutting down all processes...")
+        
+        # Signal all processes to stop
+        interrupted.set()
+        
+        # Give processes time to exit gracefully
+        print("[Main] Waiting for processes to exit gracefully (5 seconds)...")
+        
+        if hw_process and hw_process.is_alive():
+            hw_process.join(timeout=5)
+            if hw_process.is_alive():
+                print("[Main] Hardware process didn't exit, terminating...")
+                hw_process.terminate()
+                hw_process.join(timeout=2)
+                if hw_process.is_alive():
+                    print("[Main] Hardware process still alive, killing...")
+                    hw_process.kill()
+                    hw_process.join()
+        
+        if audio_proc and audio_proc.is_alive():
+            audio_proc.join(timeout=5)
+            if audio_proc.is_alive():
+                print("[Main] Audio process didn't exit, terminating...")
+                audio_proc.terminate()
+                audio_proc.join(timeout=2)
+                if audio_proc.is_alive():
+                    print("[Main] Audio process still alive, killing...")
+                    audio_proc.kill()
+                    audio_proc.join()
+        
+        # Shut down the manager to release resources
+        print("[Main] Shutting down multiprocessing manager...")
+        manager.shutdown()
+        
+        print(f"[Main] All processes terminated. Exit code: {exit_code}")
     
-    # After dashboard closes, signal all processes to stop
-    print("[Main] Dashboard closed, signaling processes to stop...")
-    interrupted.set()
-    
-    # Wait for processes to finish
-    hw_process.join(timeout=3)
-    audio_proc.join(timeout=3)
-    
-    # Force terminate if still alive
-    if hw_process.is_alive():
-        print("[Main] Force terminating hardware process...")
-        hw_process.terminate()
-        hw_process.join()
-    
-    if audio_proc.is_alive():
-        print("[Main] Force terminating audio process...")
-        audio_proc.terminate()
-        audio_proc.join()
-    
-    print(f"[Main] Application finished with exit code: {exit_code}")
     sys.exit(exit_code)
 
 if __name__ == "__main__":
     # Required for multiprocessing on Windows/macOS (safe to have on Linux too)
-    multiprocessing.set_start_method('spawn', force=True)
+    try:
+        multiprocessing.set_start_method('spawn', force=True)
+    except RuntimeError:
+        # Already set, ignore
+        pass
+    
+    # Set up proper signal handling
+    def emergency_shutdown(signum, frame):
+        print("\n[Main] Emergency shutdown requested!")
+        sys.exit(1)
+    
+    signal.signal(signal.SIGINT, emergency_shutdown)
+    signal.signal(signal.SIGTERM, emergency_shutdown)
+    
     boot()

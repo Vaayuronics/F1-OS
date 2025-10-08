@@ -78,15 +78,19 @@ sudo apt-get install -y \
 pip install PySide6 --upgrade
 ```
 
-## 6. Set Qt Environment Variables
+## 6. Environment Variables (Automatic)
 
-Add to your `~/.bashrc` or export before running:
+**No manual configuration needed!** The `start.sh` script automatically:
 
-```bash
-export QT_QPA_PLATFORM=eglfs
-export QT_QPA_EGLFS_INTEGRATION=eglfs_kms
-export QT_QPA_EGLFS_KMS_CONFIG=/home/kp101/Desktop/F1-OS/Pi/kms_config.json
-```
+- Detects if GPU is available at `/dev/dri/card0`
+- Checks if rpi-connect is running (needs X11/Wayland)
+- Checks if an X11 session is active
+- Chooses the best Qt platform automatically:
+  - **EGLFS** - Direct GPU rendering when no conflicts (best performance)
+  - **XCB** - X11 with GPU acceleration when rpi-connect is running
+  - **Auto** - Fallback if GPU not available
+
+The environment variables are set **only for the Python process**, preventing conflicts with other software like rpi-connect.
 
 ## 7. Verify GPU is Working
 
