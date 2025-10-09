@@ -157,6 +157,24 @@ if [ "$ENABLE_GPU" = true ]; then
     if [ -e /dev/dri/card0 ]; then
         GPU_AVAILABLE=true
         echo "✓ GPU detected at /dev/dri/card0"
+        
+        # Show GPU module status
+        echo "  GPU Modules loaded:"
+        lsmod | grep -E "v3d|vc4" | awk '{print "    - " $1}'
+        
+        # Show GPU temperature
+        GPU_TEMP=$(vcgencmd measure_temp 2>/dev/null)
+        if [ ! -z "$GPU_TEMP" ]; then
+            echo "  GPU Temperature: $GPU_TEMP"
+        fi
+        
+        # Check for Mesa/OpenGL ES
+        if command -v glxinfo &> /dev/null; then
+            GL_RENDERER=$(glxinfo 2>/dev/null | grep "OpenGL renderer" | cut -d ':' -f 2)
+            if [ ! -z "$GL_RENDERER" ]; then
+                echo "  OpenGL Renderer:$GL_RENDERER"
+            fi
+        fi
     else
         echo "✗ GPU not found at /dev/dri/card0"
         echo "  See GPU_SETUP.md for setup instructions"
@@ -192,20 +210,31 @@ echo "============================================"
 # Determine Qt platform to use
 if [ "$GPU_AVAILABLE" = true ] && [ "$AVOID_EGLFS" = false ]; then
     # Use EGLFS for direct GPU rendering (best performance)
-    echo "Mode: EGLFS (Direct GPU rendering, fullscreen)"
+    echo "Mode: EGLFS (Direct GPU rendering with OpenGL ES 2.0)"
     QT_QPA_PLATFORM=eglfs \
     QT_QPA_EGLFS_INTEGRATION=eglfs_kms \
     QT_QPA_EGLFS_KMS_CONFIG=/home/kp101/Desktop/F1-OS/Pi/kms_config.json \
-    QT_QUICK_BACKEND=software \
-    QSG_RENDER_LOOP=basic \
+    QT_OPENGL=es2 \
+    QT_XCB_GL_INTEGRATION=xcb_egl \
+    QT_QUICK_BACKEND=opengles \
+    QSG_RENDER_LOOP=threaded \
+    QSG_INFO=1 \
+    MESA_GL_VERSION_OVERRIDE=3.1 \
+    MESA_GLSL_VERSION_OVERRIDE=310 \
     python main.py &
     PYTHON_PID=$!
     
 elif [ "$GPU_AVAILABLE" = true ] && [ "$AVOID_EGLFS" = true ]; then
     # Use XCB (X11) with GPU acceleration when X11 is needed
-    echo "Mode: XCB (X11 with GPU acceleration)"
+    echo "Mode: XCB (X11 with GPU acceleration, OpenGL ES 2.0)"
     QT_QPA_PLATFORM=xcb \
+    QT_OPENGL=es2 \
     QT_XCB_GL_INTEGRATION=xcb_egl \
+    QT_QUICK_BACKEND=opengles \
+    QSG_RENDER_LOOP=threaded \
+    QSG_INFO=1 \
+    MESA_GL_VERSION_OVERRIDE=3.1 \
+    MESA_GLSL_VERSION_OVERRIDE=310 \
     python main.py &
     PYTHON_PID=$!
     

@@ -186,15 +186,34 @@ class F1Dashboard(QMainWindow):
         """Initialize the dashboard with all widgets and layouts.""" 
         # Create QApplication if it doesn't exist
         if not QApplication.instance():
+            # Set GPU rendering attributes BEFORE creating QApplication
+            from PySide6.QtCore import Qt as QtCore
+            from PySide6.QtGui import QSurfaceFormat
+            
+            # Configure OpenGL surface format for GPU rendering
+            fmt = QSurfaceFormat()
+            fmt.setRenderableType(QSurfaceFormat.OpenGLES)  # Force OpenGL ES (guaranteed on RPi 4)
+            fmt.setVersion(2, 0)  # OpenGL ES 2.0
+            fmt.setProfile(QSurfaceFormat.NoProfile)  # ES doesn't use profiles
+            fmt.setSwapBehavior(QSurfaceFormat.DoubleBuffer)  # Double buffering for smooth rendering
+            fmt.setSwapInterval(1)  # VSync on (prevent tearing)
+            fmt.setDepthBufferSize(24)  # 24-bit depth buffer
+            fmt.setStencilBufferSize(8)  # 8-bit stencil buffer
+            fmt.setSamples(0)  # Disable MSAA to reduce GPU load (can enable if GPU has headroom)
+            QSurfaceFormat.setDefaultFormat(fmt)
+            print("[Dashboard] Configured OpenGL ES 2.0 surface format for GPU rendering")
+            
+            # Set Qt application attributes for GPU acceleration
+            QApplication.setAttribute(QtCore.AA_UseOpenGLES)  # Force OpenGL ES backend
+            QApplication.setAttribute(QtCore.AA_UseSoftwareOpenGL, False)  # Disable software fallback
+            QApplication.setAttribute(QtCore.AA_ShareOpenGLContexts)  # Share GL contexts (better performance)
+            
             self.app = QApplication(sys.argv)
             self.app.setStyle('Fusion')  # Use Fusion style for a more modern look
             self.app.setApplicationName("F1-OS")
             self.app.setOrganizationName("F1-OS")
             
-            # Enable OpenGL hardware acceleration for Raspberry Pi
-            # Note: Using native graphics system with Qt's raster engine
-            # The GPU acceleration comes from the QT_QPA_PLATFORM env var set in main.py
-            # OpenGL surface format is not needed for standard QWidgets with raster painting
+            print("[Dashboard] QApplication created with GPU rendering enabled")
         else:
             self.app = QApplication.instance()
             
@@ -205,6 +224,17 @@ class F1Dashboard(QMainWindow):
         self.setWindowFlags(Qt.FramelessWindowHint)  # Remove window frame/title bar
         self.setMinimumSize(480, 600)  # Reduced minimum width to match screen
         self.setStyleSheet("background-color: #121212;")
+        
+        # Enable GPU-accelerated rendering for this window
+        self.setAttribute(Qt.WA_OpaquePaintEvent)  # Tell Qt we paint entire widget (optimization)
+        self.setAttribute(Qt.WA_NoSystemBackground)  # Don't waste time painting background
+        self.setAttribute(Qt.WA_DontCreateNativeAncestors)  # Reduce widget overhead
+        
+        # Viewport should use OpenGL rendering
+        from PySide6.QtWidgets import QOpenGLWidget
+        # Note: For QWidgets, GPU acceleration comes from the platform plugin (EGLFS)
+        # OpenGL widgets are for custom GL rendering - we're using Qt's optimized raster engine
+        # which is hardware-accelerated via the V3D GPU driver when EGLFS is used
         
         # Set up settings from file path
         if settings_file_path:

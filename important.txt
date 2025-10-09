@@ -1,2 +1,4 @@
 TODO: If needed revert to locking with 3d model implementation
 Commit hash: 816c865f50737fb819322d5432805e5ebbfd817b
+TODO: If needed revert to pre explicit gpu
+Commit hash: 8a5ed7089ea8c75df18724be293fec1ed14c95c7

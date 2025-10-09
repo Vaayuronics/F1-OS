@@ -12,16 +12,21 @@ import ui.dashboard as dash
 from devices.light_manager import LightManager
 from devices.button import Button
 
-# Enable GPU acceleration for Qt (if not set in environment)
-if not os.environ.get('QT_QPA_PLATFORM'):
-    # Try EGLFS first (direct GPU rendering, best performance)
-    if os.path.exists('/dev/dri/card0'):
-        os.environ['QT_QPA_PLATFORM'] = 'eglfs'
-        os.environ['QT_QPA_EGLFS_INTEGRATION'] = 'eglfs_kms'
-        print("[Main] GPU detected, using EGLFS for hardware acceleration")
-    else:
-        print("[Main] WARNING: No GPU device found at /dev/dri/card0")
-        print("[Main] See Pi/GPU_SETUP.md for GPU acceleration setup")
+# GPU configuration is done via environment variables in start.sh
+# This avoids polluting the system environment and breaking rpi-connect
+# Just print what we detected from the environment
+if os.environ.get('QT_QPA_PLATFORM'):
+    print(f"[Main] Qt Platform: {os.environ.get('QT_QPA_PLATFORM')}")
+if os.environ.get('QT_OPENGL'):
+    print(f"[Main] Qt OpenGL Mode: {os.environ.get('QT_OPENGL')}")
+if os.environ.get('QSG_RENDER_LOOP'):
+    print(f"[Main] Qt Scene Graph: {os.environ.get('QSG_RENDER_LOOP')} render loop")
+    
+# Verify GPU device exists (informational only)
+if os.path.exists('/dev/dri/card0'):
+    print("[Main] GPU device detected at /dev/dri/card0")
+else:
+    print("[Main] WARNING: No GPU device found - see Pi/GPU_SETUP.md")
 
 pico = None
 arduino = None
