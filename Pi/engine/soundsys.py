@@ -22,7 +22,7 @@ ENGINE_PATH = "engine/audio/"
 MUSIC_PATH = "engine/music/"
 NOTIFICATIONS_PATH = "engine/notifications/"
 notifier = EngineAudioPlayer()
-engineer = EngineAudioPlayer(chunk_duration= 0.3, max_buffer_size=3)
+engineer = EngineAudioPlayer(chunk_duration= 0.8, max_buffer_size=3)
 musicer = EngineAudioPlayer(max_buffer_size=5)
 music = []
 f1_v10 = {}
