@@ -1,12 +1,11 @@
 from PySide6.QtWidgets import (QMainWindow, QFrame, QSplitter, 
-                              QSizePolicy, QWidget, QVBoxLayout, QLabel, QHBoxLayout, QMessageBox, QApplication, QScrollArea)
+                              QSizePolicy, QWidget, QVBoxLayout, QLabel, QHBoxLayout, QApplication, QScrollArea)
 from PySide6.QtCore import Qt, QSettings, QSize, Signal, QTimer
-from PySide6.QtGui import QFont, QPixmap, QPainter
+from PySide6.QtGui import QFont, QSurfaceFormat
 from ui.gauge import GaugeWidget
 from ui.car2d import Car2DWidget
 from ui.battery_gauge import BatteryGaugeWidget
 from ui.volume_gauge import VolumeGaugeWidget
-import os
 import sys
 
 MAX_RPM = 14000 # Max RPM for the gauge, actual should go to about 14.5k
@@ -186,9 +185,6 @@ class F1Dashboard(QMainWindow):
         """Initialize the dashboard with all widgets and layouts.""" 
         # Create QApplication if it doesn't exist
         if not QApplication.instance():
-            # Set GPU rendering attributes BEFORE creating QApplication
-            from PySide6.QtCore import Qt as QtCore
-            from PySide6.QtGui import QSurfaceFormat
             
             # Configure OpenGL surface format for GPU rendering
             fmt = QSurfaceFormat()
@@ -204,10 +200,10 @@ class F1Dashboard(QMainWindow):
             print("[Dashboard] Configured OpenGL ES 2.0 surface format for GPU rendering")
             
             # Set Qt application attributes for GPU acceleration
-            QApplication.setAttribute(QtCore.AA_UseOpenGLES)  # Force OpenGL ES backend
-            QApplication.setAttribute(QtCore.AA_UseSoftwareOpenGL, False)  # Disable software fallback
-            QApplication.setAttribute(QtCore.AA_ShareOpenGLContexts)  # Share GL contexts (better performance)
-            
+            QApplication.setAttribute(Qt.AA_UseOpenGLES, True)  # Force OpenGL ES backend
+            QApplication.setAttribute(Qt.AA_UseSoftwareOpenGL, False)  # Disable software fallback
+            QApplication.setAttribute(Qt.AA_ShareOpenGLContexts, True)  # Share GL contexts (better performance)
+
             self.app = QApplication(sys.argv)
             self.app.setStyle('Fusion')  # Use Fusion style for a more modern look
             self.app.setApplicationName("F1-OS")
@@ -230,11 +226,9 @@ class F1Dashboard(QMainWindow):
         self.setAttribute(Qt.WA_NoSystemBackground)  # Don't waste time painting background
         self.setAttribute(Qt.WA_DontCreateNativeAncestors)  # Reduce widget overhead
         
-        # Viewport should use OpenGL rendering
-        from PySide6.QtWidgets import QOpenGLWidget
-        # Note: For QWidgets, GPU acceleration comes from the platform plugin (EGLFS)
-        # OpenGL widgets are for custom GL rendering - we're using Qt's optimized raster engine
-        # which is hardware-accelerated via the V3D GPU driver when EGLFS is used
+        # Note: GPU acceleration comes from the platform plugin (EGLFS) set via start.sh
+        # Qt's raster engine is hardware-accelerated via V3D GPU driver when properly configured
+        # with OpenGL ES 2.0 (see start.sh for environment variable configuration)
         
         # Set up settings from file path
         if settings_file_path:
