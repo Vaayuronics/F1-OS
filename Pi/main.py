@@ -140,8 +140,7 @@ def hardware_loop(interrupted_event):
                 
                 # Update RPM lights on every data update
                 rpm = data.get('RPM', 0)
-                if rpm > 0:
-                    update_rpm_lights(rpm)
+                update_rpm_lights(rpm) #Update rpm even if it is 0 !!
                 
                 # Process hardware commands
                 #TODO: Process hardware data
