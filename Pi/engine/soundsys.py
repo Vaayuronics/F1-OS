@@ -19,6 +19,7 @@ idled = False
 notifications = {}
 TRACKS = len(music)
 porcheMode = False
+loaded = False
 
 def test_latency():
     '''NOTE: Initial stretch for librosa module as a whole will take a long time. Use librosa to play the startup audio at like 1.01 times speed or something to initialize JIT.'''
@@ -48,7 +49,7 @@ def test_latency():
 
 def load_tracks():
     '''Load all tracks into memory.'''
-    global music, f1_v10, porche, notifications
+    global music, f1_v10, porche, notifications, loaded
     # Load f1 data
     f1_v10['accel'] = EngineAudioPlayer.load_audio_wav(ENGINE_PATH + "accel.wav")
     f1_v10['decel'] = EngineAudioPlayer.load_audio_wav(ENGINE_PATH + "decel.wav")
@@ -65,14 +66,21 @@ def load_tracks():
     #TODO: Add real notification sounds
     #Music
     #TODO: Load music tracks
+    loaded = True
 
 def play_startup_sound():
     '''Play the startup sound to initialize audio system.'''
+    global loaded
+    if not loaded:
+        raise Exception("Audio tracks not loaded yet!")
     #TODO: Need to add futureistic startup sound
     pass
 
 def play_f1_start():
     '''Play the F1 engine start sound.'''
+    global loaded
+    if not loaded:
+        raise Exception("Audio tracks not loaded yet!")
     engineer.play_chunk(f1_v10['start'])
 
 def set_porche_mode(enabled: bool):
@@ -82,10 +90,16 @@ def set_porche_mode(enabled: bool):
 
 def play_horn():
     '''Play the horn sound.'''
+    global loaded
+    if not loaded:
+        raise Exception("Audio tracks not loaded yet!")
     engineer.play_chunk(horn)
 
 def play_engine(accel: bool, speed: float, engine_vol: int = 100):
     '''Play engine sound based on acceleration and speed.'''
+    global loaded
+    if not loaded:
+        raise Exception("Audio tracks not loaded yet!")
     engineer.set_volume(engine_vol / 100.0) # Scale 0-100 to 0.0-1.0
     if porcheMode:
         pass #TODO: Implement porche audio logic
@@ -106,7 +120,9 @@ def current_track() -> int:
 
 def play_music(music_vol: int = 100):
     '''Play music track based on track number.'''
-    global TRACKS, curmusictime
+    global TRACKS, curmusictime, loaded
+    if not loaded:
+        raise Exception("Audio tracks not loaded yet!")
     musicer.set_volume(music_vol / 100.0) # Scale 0-100 to 0.0-1.0
     chunk = EngineAudioPlayer.transform_audio(music[track], curmusictime, musicer.get_chunk_duration(), 1.0)
     if chunk is None:
@@ -118,7 +134,9 @@ def play_music(music_vol: int = 100):
 
 def play_f1_audio(accel: bool, speed: float):
     '''Play F1 engine sound based on acceleration and speed.'''
-    global curtime, maxed, idled
+    global curtime, maxed, idled, loaded
+    if not loaded:
+        raise Exception("Audio tracks not loaded yet!")
     #NOTE: May need to set speed to 0 when idling or maxed to prevent weird speedups
     data = None
     if accel and maxed:
