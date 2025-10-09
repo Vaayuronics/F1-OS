@@ -8,25 +8,17 @@ import os
 import time  # For delays
 import select
 
-# Debug LED to show we're running
-LED = Pin("LED", Pin.OUT)
-LED.on()  # Turn on immediately to show we're starting
+LED = None
 
 # Defining objects
-gyro = gyro_module.Gyro(16, 17)
+gyro = None
 #NOTE: Headlights should also turn on a rear lights like car do at night. 
 # Only two of the three lights though in upside down equalatral triangle, the side ones. 
 # Top one is brake light. Hazards flash all lights.
-buttons = [Button(0, "Shift Emulation Toggle"), Button(1, "Headlights"), Button(2, "Hazards"),  Button(3, "Change Engine"), 
-           Button(4, "Change Music"), Button( 5,"DRS"), Button(6, "Start"), Button(7, "Stop"), 
-           Button(8, "Play/Pause"), Button(9, "Horn"), Button(10, "Auto Turn Signal Toggle")]
-knobs = [Knob(11, 12, 13, "Engine Vol", default_count=100), Knob(19, 20, 21, "Engine Tune", default_count=100), Knob(22, 26, 27, "Music Vol", default_count=100)]  # dt, clk, sw
+buttons = None
+knobs = None
 poller = select.poll()
 last_led_toggle = 0
-
-# Setting attributes
-gyro.set_function_mode(gyro_module.NDOF_MODE)
-gyro.set_power_mode(gyro_module.POWER_NORMAL)
 
 def file_exists(filepath) -> bool:
     """Returns if a file exists or not"""
@@ -121,12 +113,33 @@ def loop():
         process_command(data)
 
 if __name__ == "__main__":
-    # Initial setup - load saved angles
-    angles = load_saved_angles()
-    gyro.tare_gyro(angles)
-    
-    # Setup polling for stdin
-    poller.register(sys.stdin, select.POLLIN)
-    
-    while True:
-        loop()
+    try:
+        LED = Pin("LED", Pin.OUT)
+        LED.on()
+
+        gyro = gyro_module.Gyro(16, 17)
+        # Setting attributes
+        gyro.set_function_mode(gyro_module.NDOF_MODE)
+        gyro.set_power_mode(gyro_module.POWER_NORMAL)
+
+        buttons = [Button(0, "Shift Emulation Toggle"), Button(1, "Headlights"), Button(2, "Hazards"),  Button(3, "Change Engine"), 
+            Button(4, "Change Music"), Button( 5,"DRS"), Button(6, "Start"), Button(7, "Stop"), 
+            Button(8, "Play/Pause"), Button(9, "Horn"), Button(10, "Auto Turn Signal Toggle")]
+        
+        knobs = [Knob(11, 12, 13, "Engine Vol", default_count=100), 
+                Knob(19, 20, 21, "Engine Tune", default_count=100), 
+                Knob(22, 26, 27, "Music Vol", default_count=100)]  # dt, clk, sw
+
+        # Initial setup - load saved angles
+        angles = load_saved_angles()
+        gyro.tare_gyro(angles)
+        
+        # Setup polling for stdin
+        poller.register(sys.stdin, select.POLLIN)
+        
+        while True:
+            loop()
+    except Exception as e:
+        if LED:
+            LED.off()
+        reset()
