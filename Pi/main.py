@@ -242,7 +242,7 @@ def calc_speed_rpm(throttle: float, speed: float, gear: int, prev_speed: float =
         rpm = (speed * 60 * gear * 10) + (throttle * 50)
 
     #TODO: change back to speed
-    if rpm >= prev_speed and rpm - prev_speed > 500:
+    if rpm >= (prev_speed - 500) :
         accel = True
 
     return accel, play_speed, rpm
