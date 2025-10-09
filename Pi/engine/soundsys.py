@@ -4,7 +4,7 @@ import librosa
 import resampy
 
 # Pre-compile common librosa functions on import to speed up first use
-print("[Audio Init] Compiling JIT functions (first run only, will be cached)...")
+print("[Audio Init] Compiling JIT functions...")
 _dummy = np.random.random(4410).astype(np.float32)  # 0.1s of dummy audio
 try:
     # Force compilation of time_stretch and related functions

@@ -520,11 +520,9 @@ class F1Dashboard(QMainWindow):
             self.setBattery(data['Battery'])
             data.pop('Battery')
         if 'Engine Volume' in data:
-            print(f"[DEBUG UI] Setting Engine Volume: {data['Engine Volume']}")
             self.setEngineVolume(data['Engine Volume'])
             data.pop('Engine Volume')
         if 'Music Volume' in data:
-            print(f"[DEBUG UI] Setting Music Volume: {data['Music Volume']}")
             self.setMusicVolume(data['Music Volume'])
             data.pop('Music Volume')
         if 'Alert Title' in data:

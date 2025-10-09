@@ -209,7 +209,8 @@ def audio_loop(interrupted_event):
                     pass  # Launch control sound
                 
                 if not data.get('Pause', False):
-                    sound.play_music(data.get('Music Volume', 0))
+                    #sound.play_music(data.get('Music Volume', 0))
+                    pass
                 
                 sound.play_engine(data.get('Accel', False), data.get('Speed', 0), data.get('Engine Volume', 0))
             
