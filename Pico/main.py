@@ -140,6 +140,7 @@ if __name__ == "__main__":
         while True:
             loop()
     except Exception as e:
+        print(f"Fatal error: {e}")
         if LED:
             LED.off()
         reset()

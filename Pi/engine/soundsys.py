@@ -18,7 +18,7 @@ maxed = False
 idled = False
 notifications = {}
 TRACKS = len(music)
-porche = False
+porcheMode = False
 
 def test_latency():
     '''NOTE: Initial stretch for librosa module as a whole will take a long time. Use librosa to play the startup audio at like 1.01 times speed or something to initialize JIT.'''
@@ -77,8 +77,8 @@ def play_f1_start():
 
 def set_porche_mode(enabled: bool):
     '''Enable or disable porche engine mode.'''
-    global porche
-    porche = enabled
+    global porcheMode
+    porcheMode = enabled
 
 def play_horn():
     '''Play the horn sound.'''
@@ -87,7 +87,7 @@ def play_horn():
 def play_engine(accel: bool, speed: float, engine_vol: int = 100):
     '''Play engine sound based on acceleration and speed.'''
     engineer.set_volume(engine_vol / 100.0) # Scale 0-100 to 0.0-1.0
-    if porche:
+    if porcheMode:
         pass #TODO: Implement porche audio logic
     else:
         play_f1_audio(accel, speed)
