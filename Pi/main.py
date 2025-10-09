@@ -437,7 +437,6 @@ def process_data(pico_data, arduino_data):
                 tune = max(min(knobs['Engine Tune'].get('Count', 0), 100), 0)
                 # Convert to 0-1 range for UI (dashboard expects 0-1, not 0-100)
                 new_ui_data['Engine Tune'] = tune / 100.0
-                print(f"[DEBUG] Engine Tune: {tune / 100.0}")
     
     # Process arduino data
     if arduino_data:

@@ -1,7 +1,6 @@
 from PySide6.QtWidgets import QWidget, QSizePolicy
 from PySide6.QtCore import Qt, QRectF
-from PySide6.QtGui import QPainter, QColor, QPen, QBrush, QPainterPath, QLinearGradient
-import math
+from PySide6.QtGui import QPainter, QColor, QPen, QBrush, QPainterPath, QPixmap
 
 
 class Car2DWidget(QWidget):
@@ -59,8 +58,7 @@ class Car2DWidget(QWidget):
             return
         
         # Create a new pixmap with the current widget size
-        self._cached_pixmap = self._cached_pixmap or QPainter.createPixmap(width, height)
-        self._cached_pixmap = QPainter.createPixmap(width, height)
+        self._cached_pixmap = QPixmap(width, height)
         self._cached_pixmap.fill(self.bg_color)
         
         painter = QPainter(self._cached_pixmap)
@@ -90,7 +88,6 @@ class Car2DWidget(QWidget):
             6 * scale
         )
         painter.drawRoundedRect(rear_wing_rect, 2 * scale, 2 * scale)
-        painter.end()  # Finish drawing to the cached pixmap
         
         # 2. Draw rear tires
         painter.setBrush(QBrush(self.tire_color))
@@ -194,6 +191,8 @@ class Car2DWidget(QWidget):
             int(cx + 12 * scale),
             int(cy + 25 * scale)
         )
+        
+        painter.end()  # End painting on the cached pixmap
     
     def setBodyColor(self, color):
         """Change the car body color."""
