@@ -113,14 +113,22 @@ def loop():
         process_command(data)
 
 if __name__ == "__main__":
+    print("Initiating Pico Process...")
     try:
         LED = Pin("LED", Pin.OUT)
         LED.on()
+
+        # Setup polling for stdin
+        poller.register(sys.stdin, select.POLLIN)
+
+        print("Initializing Gyro...")
 
         gyro = gyro_module.Gyro(16, 17)
         # Setting attributes
         gyro.set_function_mode(gyro_module.NDOF_MODE)
         gyro.set_power_mode(gyro_module.POWER_NORMAL)
+
+        print("Gyro initialized.")
 
         buttons = [Button(0, "Shift Emulation Toggle"), Button(1, "Headlights"), Button(2, "Hazards"),  Button(3, "Change Engine"), 
             Button(4, "Change Music"), Button( 5,"DRS"), Button(6, "Start"), Button(7, "Stop"), 
@@ -134,11 +142,11 @@ if __name__ == "__main__":
         angles = load_saved_angles()
         gyro.tare_gyro(angles)
         
-        # Setup polling for stdin
-        poller.register(sys.stdin, select.POLLIN)
-        
+        print("Initialization complete. Entering main loop.")
+        LED.off()
         while True:
             loop()
+
     except Exception as e:
         print(f"Fatal error: {e}")
         if LED:
