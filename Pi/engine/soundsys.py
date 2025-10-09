@@ -89,6 +89,7 @@ def load_tracks():
     #TODO: Add real notification sounds
     #Music
     #TODO: Load music tracks
+    print("Finished loading all tracks.")
     loaded = True
 
 def play_startup_sound():
