@@ -639,7 +639,7 @@ def boot():
         dashboard.set_interrupted_event(interrupted)
 
         # Start dashboard (blocks until window closes) - runs smoothly on its own core
-        dashboard.enable_fullscreen()
+        #dashboard.enable_fullscreen()
         print("[Main] Starting UI (runs on main process with dedicated CPU core)")
         exit_code = dashboard.run()
         
