@@ -21,9 +21,10 @@ class NotificationFrame(QWidget):
                  background_color="#2D2D2D", title_color="white", 
                  subtitle_color="#CCCCCC", parent=None):
         super().__init__(parent)
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
+        # Remove Qt.Tool flag - makes it a child overlay instead of separate window
+        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
         self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setFixedSize(400, 400)  # Square notification
+        self.setFixedSize(400, 120)  # Smaller height for notification
         
         # Create main layout
         layout = QVBoxLayout(self)
@@ -83,24 +84,24 @@ class NotificationFrame(QWidget):
         self.destroy_timer.timeout.connect(self._on_destroy_timeout)
         self.destroy_timer.start(duration_ms)
         
-        self.show()
-        self.raise_()
-        self.activateWindow()
+        print(f"[Notification] Created: '{title}' - '{subtitle}' for {duration_ms}ms")
+        
+        # Don't show yet - let the manager position us first
     
     def _on_destroy_timeout(self):
         """Called when the destroy timer expires."""
         self.notification_closed.emit(self)
         self.deleteLater()
 
-
 class NotificationManager(QWidget):
     """Manages multiple stacked notification frames."""
     
     def __init__(self, parent=None):
         super().__init__(parent)
+        # Manager is invisible overlay on parent - just tracks notifications
         self.setAttribute(Qt.WA_TransparentForMouseEvents)  # Don't block clicks
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground)
+        # No special window flags - this stays as part of parent window
         
         # Track active notifications (oldest first)
         self.active_notifications = []
@@ -110,8 +111,6 @@ class NotificationManager(QWidget):
         
         # Position from top of parent
         self.top_margin = 20
-        
-        self.hide()  # Start hidden, show when first notification appears
     
     def show_notification(self, title, subtitle="", duration_ms=2000, 
                          background_color="#2D2D2D", title_color="white", 
@@ -144,28 +143,28 @@ class NotificationManager(QWidget):
         # Add to active list (append to end, oldest at front)
         self.active_notifications.append(notification)
         
+        print(f"[NotificationManager] Total active notifications: {len(self.active_notifications)}")
+        
         # Reposition all notifications
         self._reposition_notifications()
         
-        # Show manager if hidden
-        if not self.isVisible():
-            self.show()
+        # Now show the notification after positioning
+        notification.show()
+        notification.raise_()
     
     def _on_notification_closed(self, notification):
         """Called when a notification is closed/destroyed."""
         if notification in self.active_notifications:
             self.active_notifications.remove(notification)
+            print(f"[NotificationManager] Notification closed. Remaining: {len(self.active_notifications)}")
         
         # Reposition remaining notifications
         self._reposition_notifications()
-        
-        # Hide manager if no more notifications
-        if not self.active_notifications:
-            self.hide()
     
     def _reposition_notifications(self):
         """Reposition all active notifications in a vertical stack (oldest on top)."""
         if not self.parent():
+            print("[NotificationManager] No parent widget!")
             return
         
         # Use mapToGlobal to get absolute screen coordinates
@@ -176,9 +175,12 @@ class NotificationManager(QWidget):
         center_x = parent_global_pos.x() + (parent_width - 400) // 2  # Center horizontally
         current_y = parent_global_pos.y() + self.top_margin
         
+        print(f"[NotificationManager] Repositioning {len(self.active_notifications)} notifications at x={center_x}, starting y={current_y}")
+        
         # Position from top to bottom (oldest first)
-        for notification in self.active_notifications:
+        for i, notification in enumerate(self.active_notifications):
             notification.move(center_x, current_y)
+            print(f"[NotificationManager]   Notification {i} at ({center_x}, {current_y})")
             current_y += notification.height() + self.notification_spacing
 
 class F1Dashboard(QMainWindow):
@@ -753,6 +755,7 @@ class F1Dashboard(QMainWindow):
             dashboard.show_notification("HEADLIGHTS", "ON", 1500, "#1E4A2E", "white", "#90EE90")
             dashboard.show_notification("HAZARDS", "ACTIVATED", 2000, "#4A2E1E", "white", "#FFD700")
         """
+        print(f"[Dashboard] show_notification called: '{title}' - '{subtitle}'")
         self.notification_manager.show_notification(title, subtitle, duration_ms, background_color, title_color, subtitle_color)
     
     def setWheelRotation(self, angle_degrees):
