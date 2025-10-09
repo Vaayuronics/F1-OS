@@ -441,6 +441,7 @@ def process_data(pico_data, arduino_data):
     # Process arduino data
     if arduino_data:
         if 'Throttle' in arduino_data and 'Speed' in arduino_data and 'Brake' in arduino_data:
+            #TODO: Change back to speed from rpm for debug
             accel, speed, rpm = calc_speed_rpm(
                 arduino_data.get('Throttle', 0),  # Pass raw degrees
                 arduino_data.get('Speed', 0),
@@ -448,9 +449,8 @@ def process_data(pico_data, arduino_data):
                 prev_speed,
                 prev_time
             )
-            
             new_sound_data['Accel'] = accel
-            new_sound_data['Speed'] = rpm #TODO change to speed later
+            new_sound_data['Speed'] = rpm #here
             new_ui_data['RPM'] = rpm
             new_ui_data['Speed'] = arduino_data['Speed']
             new_ui_data['Throttle'] = arduino_data['Throttle'] / MAX_THROTTLE_DEG  # Convert to 0-1 for UI
@@ -460,7 +460,7 @@ def process_data(pico_data, arduino_data):
             
             # Update persistent state
             with persistent_state_lock:
-                persistent_state['Prev Speed'] = speed
+                persistent_state['Prev Speed'] = rpm #here
                 persistent_state['Prev Time'] = time.time()
     
     # Update shared dicts atomically (always latest data, no queueing)
