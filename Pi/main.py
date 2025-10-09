@@ -180,6 +180,8 @@ def hardware_loop(interrupted_event):
     
     print("[hardware_loop] Thread exiting")
 
+#TODO: still need to fix some issues with the audio popping, 
+#And the 0 rpm logic still accelerating.
 def audio_loop(interrupted_event):
     '''Play the sounds chunks and return - runs in separate thread within audio process'''
     global sound_data_dict
@@ -324,6 +326,7 @@ def process_data(pico_data, arduino_data):
                 new_sound_data['Porche'] = porche
                 new_ui_data['Alert Title'] = "Engine Changed"
                 new_ui_data['Alert Message'] = f"Engine mode changed to {'Porche' if porche else 'F1 v10'}."
+                print("[Remove Me] Giving engine change alert")
             
             # Change Music
             if buttons.get('Change Music', {}).get('Pressed', False):

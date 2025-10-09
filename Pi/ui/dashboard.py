@@ -531,6 +531,7 @@ class F1Dashboard(QMainWindow):
             self.setMusicVolume(data['Music Volume'])
             data.pop('Music Volume')
         if 'Alert Title' in data:
+            print("[Remove Me] Received engine change alert")
             alert_title = data['Alert Title']
             alert_text = data['Alert Message'] if 'Alert Message' in data else ""
             self.show_notification(alert_title, alert_text, 3000)
