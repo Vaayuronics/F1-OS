@@ -450,7 +450,7 @@ def process_data(pico_data, arduino_data):
             )
             
             new_sound_data['Accel'] = accel
-            new_sound_data['Speed'] = speed
+            new_sound_data['Speed'] = rpm #TODO change to speed later
             new_ui_data['RPM'] = rpm
             new_ui_data['Speed'] = arduino_data['Speed']
             new_ui_data['Throttle'] = arduino_data['Throttle'] / MAX_THROTTLE_DEG  # Convert to 0-1 for UI
