@@ -112,11 +112,6 @@ def hardware_update_loop(interrupted_event):
             pico_data = pico.poll()
             arduino_data = arduino.poll()
             
-            if pico_data:
-                print(f"[DEBUG] Pico data: {pico_data}")
-            if arduino_data:
-                print(f"[DEBUG] Arduino data: {arduino_data}")
-            
             process_data(pico_data, arduino_data)
             time.sleep(0.05)  # 20Hz polling - now won't block UI thanks to separate process
         except Exception as e:
@@ -408,7 +403,6 @@ def process_data(pico_data, arduino_data):
                     volume = max(min(knobs['Engine Vol'].get('Count', 0), 100), 0)
                     new_sound_data['Engine Volume'] = volume
                     new_ui_data['Engine Volume'] = volume
-                    print(f"[DEBUG] Engine Volume: {volume}")
             
             # Music Volume
             if 'Music Vol' in knobs:
@@ -425,7 +419,6 @@ def process_data(pico_data, arduino_data):
                     volume = max(min(knobs['Music Vol'].get('Count', 0), 100), 0)
                     new_sound_data['Music Volume'] = volume
                     new_ui_data['Music Volume'] = volume
-                    print(f"[DEBUG] Music Volume: {volume}")
             
             # Engine Tune
             if 'Engine Tune' in knobs:
