@@ -168,10 +168,13 @@ class NotificationManager(QWidget):
         if not self.parent():
             return
         
-        parent_rect = self.parent().geometry()
-        center_x = parent_rect.x() + (parent_rect.width() - 400) // 2  # Center horizontally
+        # Use mapToGlobal to get absolute screen coordinates
+        parent_widget = self.parent()
+        parent_global_pos = parent_widget.mapToGlobal(parent_widget.rect().topLeft())
+        parent_width = parent_widget.width()
         
-        current_y = parent_rect.y() + self.top_margin
+        center_x = parent_global_pos.x() + (parent_width - 400) // 2  # Center horizontally
+        current_y = parent_global_pos.y() + self.top_margin
         
         # Position from top to bottom (oldest first)
         for notification in self.active_notifications:
