@@ -1,11 +1,28 @@
 import time
+import numpy as np
+import librosa
+import resampy
+
+# Pre-compile common librosa functions on import to speed up first use
+print("[Audio Init] Compiling JIT functions (first run only, will be cached)...")
+_dummy = np.random.random(4410).astype(np.float32)  # 0.1s of dummy audio
+try:
+    # Force compilation of time_stretch and related functions
+    _ = librosa.effects.time_stretch(_dummy, rate=1.5)
+    _ = librosa.effects.time_stretch(_dummy, rate=0.8)
+    # Pre-compile resampling too
+    _ = resampy.resample(_dummy, 44100, 48000)
+    print("[Audio Init] ✓ Audio system initialized and cached")
+except Exception as e:
+    print(f"[Audio Init] Warning: Could not pre-compile audio functions: {e}")
+
 from engine.player import EngineAudioPlayer
 
 ENGINE_PATH = "engine/audio/"
 MUSIC_PATH = "engine/music/"
 NOTIFICATIONS_PATH = "engine/notifications/"
 notifier = EngineAudioPlayer()
-engineer = EngineAudioPlayer(chunk_duration= 0.5, max_buffer_size=3)
+engineer = EngineAudioPlayer(chunk_duration= 0.3, max_buffer_size=3)
 musicer = EngineAudioPlayer(max_buffer_size=5)
 music = []
 f1_v10 = {}
@@ -51,14 +68,20 @@ def load_tracks():
     '''Load all tracks into memory.'''
     global music, f1_v10, porche, notifications, loaded
     # Load f1 data
+    print("Loading acceleration sound...")
     f1_v10['accel'] = EngineAudioPlayer.load_audio_wav(ENGINE_PATH + "accel.wav")
+    print("Loading deceleration sound...")
     f1_v10['decel'] = EngineAudioPlayer.load_audio_wav(ENGINE_PATH + "decel.wav")
+    print("Loading idle sound...")
     f1_v10['idle'] = EngineAudioPlayer.load_audio_wav(ENGINE_PATH + "Idle.wav")
+    print("Loading start sound...")
     f1_v10['start'] = EngineAudioPlayer.load_audio_wav(ENGINE_PATH + "Start.wav")
+    print("Loading stop sound...")
     f1_v10['stop'] = EngineAudioPlayer.load_audio_wav(ENGINE_PATH + "Stop.wav")
+    print("Loading max RPM sound...")
     f1_v10['max_rpm'] = EngineAudioPlayer.load_audio_wav(ENGINE_PATH + "max_rpm.wav")
     # Load porche data
-    porche['accel'] = EngineAudioPlayer.load_audio_wav(ENGINE_PATH + "gt3R.wav")
+    #porche['accel'] = EngineAudioPlayer.load_audio_wav(ENGINE_PATH + "gt3R.wav")
     #TODO: Add more sounds and splice the porche sound into accel, decel, idle, start, stop, max_rpm
     # Horn
     #TODO: Replace with real horn sound
@@ -75,6 +98,13 @@ def play_startup_sound():
         raise Exception("Audio tracks not loaded yet!")
     #TODO: Need to add futureistic startup sound
     pass
+
+def reset_curtime():
+    '''Reset the current engine audio time to 0.'''
+    global curtime, maxed, idled
+    curtime = 0.0
+    maxed = False
+    idled = False
 
 def play_f1_start():
     '''Play the F1 engine start sound.'''

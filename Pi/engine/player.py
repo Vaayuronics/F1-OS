@@ -10,7 +10,7 @@ from scipy.io import wavfile
 SAMPLE_RATE = 44100  # Sample rate for audio playback
    
 class EngineAudioPlayer:
-    def __init__(self, chunk_duration : float = 1.0, channels : int = 2, target : int = 1, max_buffer_size : int = 10):
+    def __init__(self, chunk_duration : float = 1.0, target : int = 1, max_buffer_size : int = 10):
         '''Smaller chunk size increases reponsiveness'''
         # Increase buffer size and add a minimum buffer threshold
         self.buffer = queue.Queue(maxsize=max_buffer_size)
@@ -29,7 +29,7 @@ class EngineAudioPlayer:
 
         self.stream = sd.OutputStream(
             samplerate=SAMPLE_RATE,
-            channels=channels,
+            channels=1,  # Mono output
             dtype='float32',
             blocksize=block_size,
             latency='low'
@@ -82,52 +82,36 @@ class EngineAudioPlayer:
         return power_of_2
 
     @staticmethod
-    def load_audio_wav(path : str) -> tuple[np.ndarray, int]:
+    def load_audio_wav(path : str) -> np.ndarray:
         if not os.path.exists(path):
             raise FileNotFoundError(f"Audio file not found: {path}")
         
-        audio_data, sample_rate = librosa.load(path, sr=None, mono=False)  # Don't force mono
-
+        print("Loading audio file:", path)
+        # Force mono audio - much simpler and faster!
+        audio_data, sample_rate = librosa.load(path, sr=None, mono=True)
+        print(f"Loaded mono audio with shape {audio_data.shape} and sample rate {sample_rate}")
+        
+        # Ensure float32 format
         if audio_data.dtype != np.float32:
             if np.issubdtype(audio_data.dtype, np.integer):
                 audio_data = audio_data / np.iinfo(audio_data.dtype).max
             audio_data = audio_data.astype(np.float32)
-
-        # Determine number of channels
-        if audio_data.ndim == 1:
-            channels = 1
-        else:
-            # librosa loads multi-channel as (channels, samples)
-            channels = audio_data.shape[0]
-            # If we have more samples than channels, transpose to (samples, channels)
-            if audio_data.shape[0] > audio_data.shape[1]:
-                audio_data = audio_data.T
-                channels = audio_data.shape[1]
-
+        
+        # Resample if needed
         if sample_rate != SAMPLE_RATE:
-            if audio_data.ndim == 1:
-                audio_data = resampy.resample(audio_data, sample_rate, SAMPLE_RATE)
-            else:
-                # For multi-channel, resample each channel
-                resampled = []
-                for i in range(channels):
-                    resampled.append(resampy.resample(audio_data[:, i], sample_rate, SAMPLE_RATE))
-                audio_data = np.column_stack(resampled)
-    
-        return audio_data, channels
+            audio_data = resampy.resample(audio_data, sample_rate, SAMPLE_RATE)
+        
+        # Always return 1 channel for mono
+        return audio_data
 
     @staticmethod
-    def transform_audio(data : np.ndarray, start_time : float, duration : float,speed : float) -> np.ndarray:
+    def transform_audio(data : np.ndarray, start_time : float, duration : float, speed : float) -> np.ndarray:
         '''Change audio speed without affecting pitch\n
         Also get the specific timing of the audio data'''
         start_sample = int(start_time * SAMPLE_RATE)
         
-        # Get total samples - handle both mono and multi-channel audio
-        if data.ndim == 1:
-            total_samples = data.shape[0]
-        else:
-            total_samples = data.shape[1]  # For multi-channel (channels, samples)
-            
+        # Mono audio only - simple 1D array
+        total_samples = data.shape[0]
         requested_samples = int(duration * SAMPLE_RATE)
         end_sample = start_sample + requested_samples
 
@@ -135,11 +119,8 @@ class EngineAudioPlayer:
             # End of file reached
             return None
 
-        # Slice the audio data properly
-        if data.ndim == 1:
-            sliced_data = data[start_sample:min(end_sample, total_samples)]
-        else:
-            sliced_data = data[:, start_sample:min(end_sample, total_samples)]
+        # Slice the audio data
+        sliced_data = data[start_sample:min(end_sample, total_samples)]
 
         if speed == 1.0:
             return sliced_data
@@ -152,12 +133,8 @@ class EngineAudioPlayer:
 
     @staticmethod
     def get_dur(data : np.ndarray) -> float:
-        '''Get audio data duration'''
-        if data.ndim == 1:
-            return len(data) / SAMPLE_RATE
-        else:
-            # For multi-channel audio, get the number of samples (largest dimension)
-            return data.shape[1] / SAMPLE_RATE
+        '''Get audio data duration (mono only)'''
+        return len(data) / SAMPLE_RATE
 
     @staticmethod
     def load_audio(path : str) -> np.ndarray:
@@ -203,7 +180,7 @@ class EngineAudioPlayer:
             return self.playback_started
 
     def play_chunk(self, data : np.ndarray) -> bool:
-        '''Asynchronously play a chunk of audio data\n
+        '''Asynchronously play a chunk of audio data (mono only)\n
         Returns False if buffer is full or player is stopped. True if successful.'''
         if data is None:
             print("Cannot play None audio chunk")
@@ -214,14 +191,9 @@ class EngineAudioPlayer:
                 print("Audio player is not running")
                 return False
 
-        # Make sure data is contiguous when putting in buffer
+        # Mono audio - simple 1D array, no conversion needed
         chunk = data
         
-        # sounddevice expects (samples, channels) format, but our audio is in (channels, samples)
-        if chunk.ndim == 2 and chunk.shape[0] < chunk.shape[1]:
-            # Transpose from (channels, samples) to (samples, channels)
-            chunk = chunk.T
-
         # Get the volume atomically, if not locked use previous value to prevent stutter
         if(not self.vol_lock.locked()):
             with self.vol_lock:
@@ -229,10 +201,12 @@ class EngineAudioPlayer:
                 self._prev_volume = vol
         else:
             vol = self._prev_volume
+        
         # Apply volume scaling
         if vol != 1.0:
             chunk = (chunk * np.float32(vol)).astype(np.float32, copy=False)
 
+        # Ensure contiguous memory layout
         chunk = np.ascontiguousarray(chunk, dtype=np.float32)
 
         with self.queue_lock:

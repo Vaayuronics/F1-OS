@@ -195,8 +195,11 @@ def audio_loop(interrupted_event):
                 
                 if data.get('Start', False):
                     sound.play_f1_start()
+                    sound.reset_curtime()  # Reset engine sound time
+                    continue
                 if data.get('Horn', False):
                     sound.play_horn()
+                    continue
                 if 'Porche' in data:
                     sound.set_porche_mode(data['Porche'])
                 if data.get('Change Track', False):
