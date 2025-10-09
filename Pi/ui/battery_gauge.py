@@ -16,11 +16,18 @@ class BatteryGaugeWidget(QWidget):
         self.battery_level = 100  # Battery level 0-100
         self.setMinimumSize(60, 120)  # Reduced from 80x200 to 60x120
         self.setMaximumWidth(100)     # Reduced from 120 to 100
+        
+        # Cache previous value to avoid unnecessary repaints
+        self._prev_battery_level = -1
     
     def setBatteryLevel(self, level):
         """Set the battery level (0-100)."""
-        self.battery_level = max(0, min(100, level))
-        self.update()
+        new_level = max(0, min(100, level))
+        # Only update if battery level changed by at least 1%
+        if abs(new_level - self._prev_battery_level) >= 1.0:
+            self.battery_level = new_level
+            self._prev_battery_level = new_level
+            self.update()
     
     def getBatteryLevel(self):
         """Get the current battery level."""
@@ -38,9 +45,9 @@ class BatteryGaugeWidget(QWidget):
     def paintEvent(self, event):
         """Render the battery gauge on screen."""
         painter = QPainter(self)
-        # Enable full antialiasing for smooth graphics
+        # Reduce antialiasing for performance (battery is mostly rectangles)
         painter.setRenderHint(QPainter.Antialiasing, True)
-        painter.setRenderHint(QPainter.TextAntialiasing, True)
+        painter.setRenderHint(QPainter.TextAntialiasing, False)  # Disabled for performance
         painter.setClipRect(event.rect())  # Only paint dirty region
         
         # Calculate dimensions
@@ -59,6 +66,9 @@ class BatteryGaugeWidget(QWidget):
     def _drawBatteryIcon(self, painter):
         """Draw an enlarged battery icon that fills the available space."""
         painter.save()
+        
+        # DISABLE antialiasing for faster rendering of dynamic fill
+        painter.setRenderHint(QPainter.Antialiasing, False)
         
         rect = self.rect()
         # Make the battery much larger to fill the space previously used by both icon and bar

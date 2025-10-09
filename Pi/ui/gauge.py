@@ -25,13 +25,24 @@ class GaugeWidget(QWidget):
         self.setAttribute(Qt.WA_OpaquePaintEvent)  # No need to erase background
         self.setAttribute(Qt.WA_NoSystemBackground)  # We draw everything ourselves
         self.setUpdatesEnabled(True)
+        
+        # Cache previous values to avoid unnecessary repaints
+        self._prev_value = -1
+        self._prev_throttle = -1
+        self._prev_center_value = None
+        
+        # Pre-compute gauge geometry (will be calculated on first paint)
+        self._cached_geometry = None
+        self._cached_tick_positions = []
     
     def setValue(self, value):
         """Set the current value of the gauge."""
-        self.current_value = max(0, min(self.max_value, value))
-        # Use repaint() instead of update() for immediate rendering
-        # Qt will batch these automatically
-        self.update()
+        new_value = max(0, min(self.max_value, value))
+        # Only update if value actually changed (avoid unnecessary repaints)
+        if abs(new_value - self._prev_value) > 0.5:  # Threshold to reduce micro-updates
+            self.current_value = new_value
+            self._prev_value = new_value
+            self.update()
     
     def getValue(self):
         """Get the current value of the gauge."""
@@ -50,8 +61,12 @@ class GaugeWidget(QWidget):
     
     def setThrottle(self, throttle):
         """Set the throttle value (0-1 range)"""
-        self.throttle = min(max(0, throttle), 1.0)
-        self.update()
+        new_throttle = min(max(0, throttle), 1.0)
+        # Only update if throttle actually changed significantly
+        if abs(new_throttle - self._prev_throttle) > 0.01:  # 1% threshold
+            self.throttle = new_throttle
+            self._prev_throttle = new_throttle
+            self.update()
     
     def getThrottle(self):
         """Get the current throttle value"""
@@ -59,8 +74,11 @@ class GaugeWidget(QWidget):
     
     def setCenterValue(self, value):
         """Set a custom value to display in the center (e.g., gear number)"""
-        self.custom_center_value = value
-        self.update()
+        # Only update if value actually changed
+        if value != self._prev_center_value:
+            self.custom_center_value = value
+            self._prev_center_value = value
+            self.update()
     
     def getCenterValue(self):
         """Get the custom center value"""
@@ -74,10 +92,10 @@ class GaugeWidget(QWidget):
     def paintEvent(self, event):
         """Render the gauge on screen."""
         painter = QPainter(self)
-        # Enable full antialiasing for smooth graphics
+        # Use selective antialiasing - only where needed for smooth curves
+        # Text antialiasing is expensive, disable it for faster rendering
         painter.setRenderHint(QPainter.Antialiasing, True)
-        painter.setRenderHint(QPainter.TextAntialiasing, True)
-        painter.setRenderHint(QPainter.SmoothPixmapTransform, True)
+        painter.setRenderHint(QPainter.TextAntialiasing, False)  # Disabled for performance
         
         # Only paint the dirty region
         painter.setClipRect(event.rect())
@@ -101,6 +119,9 @@ class GaugeWidget(QWidget):
     def _drawThrottleArc(self, painter):
         """Draw a throttle arc beneath the RPM arc as a curved bar with gradient colors"""
         painter.save()
+        
+        # DISABLE antialiasing for this dynamic element (performance optimization)
+        painter.setRenderHint(QPainter.Antialiasing, False)
         
         # Calculate dimensions
         rect = self.rect()
@@ -219,6 +240,9 @@ class GaugeWidget(QWidget):
     
     def _drawValueArc(self, painter):
         """Draw the value arc (RPM) on the gauge."""
+        # DISABLE antialiasing for this dynamic element (performance optimization)
+        painter.setRenderHint(QPainter.Antialiasing, False)
+        
         center_x = self.width() / 2
         center_y = self.height() / 2
         radius = min(center_x, center_y) - 10

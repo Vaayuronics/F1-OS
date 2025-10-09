@@ -810,7 +810,10 @@ class F1Dashboard(QMainWindow):
         data_keys = list(data_dict.keys())
         num_items = len(data_keys)
         
-        # Update visible rows with new data (ONLY setText calls)
+        # Batch updates to reduce repaints (Qt will batch automatically, but we help it)
+        updates_made = False
+        
+        # Update visible rows with new data (ONLY setText calls when values change)
         for i in range(min(num_items, self._max_telemetry_rows)):
             key = data_keys[i]
             value = data_dict[key]
@@ -821,12 +824,19 @@ class F1Dashboard(QMainWindow):
                 pool_entry['label'].setText(f"{key}:")
                 pool_entry['key'] = key
                 pool_entry['row'].show()
+                updates_made = True
             
-            # Always update value (this is the fast path)
+            # Only update value if it actually changed (crucial optimization)
             value_str = str(value)
             if pool_entry.get('last_value') != value_str:
                 pool_entry['value'].setText(value_str)
                 pool_entry['last_value'] = value_str
+                updates_made = True
+        
+        # Optional: force a single repaint if any updates were made
+        # Qt usually batches these automatically, but this ensures it happens
+        if updates_made and num_items < 5:  # Only for small updates
+            self.telemetry_content_widget.update()
     
     def clearLayout(self, layout):
         """Helper method to clear a layout recursively."""

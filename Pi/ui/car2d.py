@@ -28,19 +28,44 @@ class Car2DWidget(QWidget):
         self.setAttribute(Qt.WA_NoSystemBackground)
         self.setUpdatesEnabled(True)
         
+        # Cache the car pixmap to avoid redrawing every frame
+        self._cached_pixmap = None
+        self._cached_size = None
+        
     def paintEvent(self, event):
         """Draw a stylized F1 car from top-down view."""
         painter = QPainter(self)
-        # Enable antialiasing for smooth graphics
-        painter.setRenderHint(QPainter.Antialiasing, True)
         painter.setClipRect(event.rect())  # Only paint dirty region
         
-        # Fill background
-        painter.fillRect(self.rect(), self.bg_color)
+        # Check if we need to regenerate the cached pixmap
+        current_size = self.size()
+        if self._cached_pixmap is None or self._cached_size != current_size:
+            self._regenerate_cache()
+            self._cached_size = current_size
         
-        # Get widget dimensions
+        # Simply draw the cached pixmap (MUCH faster than redrawing vector graphics)
+        if self._cached_pixmap:
+            painter.drawPixmap(0, 0, self._cached_pixmap)
+        else:
+            # Fallback if cache failed
+            painter.fillRect(self.rect(), self.bg_color)
+    
+    def _regenerate_cache(self):
+        """Regenerate the cached car pixmap (called only when widget resizes)."""
         width = self.width()
         height = self.height()
+        
+        if width <= 0 or height <= 0:
+            return
+        
+        # Create a new pixmap with the current widget size
+        self._cached_pixmap = self._cached_pixmap or QPainter.createPixmap(width, height)
+        self._cached_pixmap = QPainter.createPixmap(width, height)
+        self._cached_pixmap.fill(self.bg_color)
+        
+        painter = QPainter(self._cached_pixmap)
+        # Enable antialiasing for smooth graphics (only when caching)
+        painter.setRenderHint(QPainter.Antialiasing, True)
         
         # Scale factor - car should fit nicely in the widget
         scale = min(width, height) / 100.0  # Base scale on 100 units
@@ -65,6 +90,7 @@ class Car2DWidget(QWidget):
             6 * scale
         )
         painter.drawRoundedRect(rear_wing_rect, 2 * scale, 2 * scale)
+        painter.end()  # Finish drawing to the cached pixmap
         
         # 2. Draw rear tires
         painter.setBrush(QBrush(self.tire_color))
