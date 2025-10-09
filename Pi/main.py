@@ -212,7 +212,7 @@ def audio_loop(interrupted_event):
                     #sound.play_music(data.get('Music Volume', 0))
                     pass
                 
-                sound.play_engine(data.get('Accel', False), data.get('Speed', 0), data.get('Engine Volume', 0))
+                sound.play_engine(data.get('Accel', False), data.get('Play Speed', 0), data.get('Engine Volume', 0))
             
             time.sleep(0.05)  # 20Hz update rate
             
@@ -241,7 +241,8 @@ def calc_speed_rpm(throttle: float, speed: float, gear: int, prev_speed: float =
         # Add proper gear-based RPM calculation here
         rpm = (speed * 60 * gear * 10) + (throttle * 50)
 
-    if speed >= prev_speed:
+    #TODO: change back to speed
+    if rpm >= prev_speed:
         accel = True
 
     return accel, play_speed, rpm
@@ -442,7 +443,7 @@ def process_data(pico_data, arduino_data):
     if arduino_data:
         if 'Throttle' in arduino_data and 'Speed' in arduino_data and 'Brake' in arduino_data:
             #TODO: Change back to speed from rpm for debug
-            accel, speed, rpm = calc_speed_rpm(
+            accel, play_speed, rpm = calc_speed_rpm(
                 arduino_data.get('Throttle', 0),  # Pass raw degrees
                 arduino_data.get('Speed', 0),
                 cur_gear,
@@ -450,7 +451,7 @@ def process_data(pico_data, arduino_data):
                 prev_time
             )
             new_sound_data['Accel'] = accel
-            new_sound_data['Speed'] = rpm #here
+            new_sound_data['Play Speed'] = play_speed
             new_ui_data['RPM'] = rpm
             new_ui_data['Speed'] = arduino_data['Speed']
             new_ui_data['Throttle'] = arduino_data['Throttle'] / MAX_THROTTLE_DEG  # Convert to 0-1 for UI
@@ -460,7 +461,7 @@ def process_data(pico_data, arduino_data):
             
             # Update persistent state
             with persistent_state_lock:
-                persistent_state['Prev Speed'] = rpm #here
+                persistent_state['Prev Speed'] = rpm #arduino_data.get('Speed', 0)
                 persistent_state['Prev Time'] = time.time()
     
     # Update shared dicts atomically (always latest data, no queueing)
