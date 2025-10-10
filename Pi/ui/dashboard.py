@@ -352,7 +352,7 @@ class F1Dashboard(QMainWindow):
             current_time = datetime.datetime.now().strftime("%H:%M:%S")
             formatted_title = f"{alert_title} {current_time}"
             self.show_notification(formatted_title, alert_text)
-            print("[Remove Me] Giving change to alert system")
+            print("[Remove Me] Receiving change from alert system")
     
     def enable_fullscreen(self):
         """Enable borderless fullscreen mode suitable for Raspberry Pi."""

@@ -40,30 +40,9 @@ dashboard = None
 MAX_THROTTLE_DEG = 135
 
 # Use multiprocessing Manager dict for inter-process communication (avoids GIL)
-# This allows UI to run on its own CPU core without being blocked by other threads
-# Using dict instead of queue ensures we ALWAYS get latest data, never old queued data
 ui_data_dict = None  # Will be initialized in main as Manager().dict()
 hardware_data_dict = None
 sound_data_dict = None
-
-#TODO: Clean up old data from persistent state
-# Persistent state dictionary with lock
-persistent_state = {
-    'Shift Emulation': False,
-    'Headlights': False,
-    'Hazards': False,
-    'Auto Turn Signal': False,
-    'DRS': False,
-    'Started': False,
-    'Engine Mute': False,
-    'Music Mute': False,
-    'Porche': False,
-    'Pause': False,
-    'Lights': 'Off',
-    'Prev Time': 0,   # Needed to calculate rate of change
-    'Prev RPM': 0,    # Needed to detect RPM changes for acceleration
-}
-persistent_state_lock = None  # Will be initialized as multiprocessing.Lock()
 
 interrupted = None  # Will be initialized as multiprocessing.Event()
 
@@ -107,7 +86,11 @@ def update_rpm_lights(rpm):
 def get_ui_data():
     """Get latest UI data as a regular dict (copy from shared dict)."""
     if ui_data_dict:
-        return dict(ui_data_dict)  # Return copy to avoid issues
+        data = dict(ui_data_dict)
+        # Clear alert messages after reading
+        ui_data_dict["Alert Title"] = ""
+        ui_data_dict["Alert Message"] = ""
+        return data  # Return copy to avoid issues
     return None
 
 def hardware_update_loop(interrupted_event):
@@ -139,13 +122,13 @@ def hardware_loop(interrupted_event):
             if hardware_data_dict:
                 data = dict(hardware_data_dict)  # Copy to regular dict
                 
-                # Update RPM lights on every data update
+                # Update RPM lights on every data update (continuous)
                 rpm = data.get('RPM', 0)
                 update_rpm_lights(rpm) #Update rpm even if it is 0 !!
                 
                 # Process hardware commands
                 #TODO: Process hardware data
-                # Check persistent flags in data for operations
+                # Check persistent flags in data for operations (level-triggered)
                 if data.get('Lights') == 'Headlights':
                     # Turn on headlights
                     pass
@@ -164,13 +147,15 @@ def hardware_loop(interrupted_event):
                     # Activate Launch Control
                     pass
 
+                # Edge-triggered events (reset after consuming)
                 if data.get('START', False):
                     # Start throttle
                     arduino.send({"command": "tare"})
+                    hardware_data_dict['START'] = False  # Reset after consuming
 
                 if data.get('STOP', False):
                     # Emergency stop throttle
-                    pass
+                    pass  # STOP is level-triggered (stays on while held)
             
             time.sleep(0.05)  # 20Hz update rate
             
@@ -194,21 +179,23 @@ def audio_loop(interrupted_event):
             if sound_data_dict:
                 data = dict(sound_data_dict)  # Copy to regular dict
                 
+                # Handle edge-triggered events (reset after consuming)
                 if data.get('Start', False):
                     sound.play_f1_start()
                     sound.reset_curtime()  # Reset engine sound time
+                    sound_data_dict['Start'] = False  # Reset after consuming
                     continue
                 if data.get('Horn', False):
                     sound.play_horn()
-                    continue
+                    continue  # Horn is level-triggered (stays on while held)
                 if 'Porche' in data:
                     sound.set_porche_mode(data['Porche'])
                 if data.get('Change Track', False):
                     sound.change_track(sound.current_track() + 1)
+                    sound_data_dict['Change Track'] = False  # Reset after consuming
                 #TODO: Implement Launch sound
                 if data.get('Launch', False):
                     pass  # Launch control sound
-                
                 if not data.get('Pause', False):
                     #sound.play_music(data.get('Music Volume', 0))
                     pass
@@ -266,31 +253,25 @@ def calc_speed_rpm(throttle: float, speed: float, gear: int, prev_rpm: float = 0
     return accel, idle, play_speed, rpm
 
 def process_data(pico_data, arduino_data):
-    """Combine and process data from pico and arduino.\n
-    Operate on any hardware instructions.\n
-    Return combined data for UI."""
-    global cur_gear, persistent_state, persistent_state_lock
+    """Combine and process data from pico and arduino.
+    Operate on any hardware instructions.
+    Update shared dicts directly - consumers will reset what they've handled."""
+    global cur_gear, ui_data_dict, hardware_data_dict, sound_data_dict
 
-    # Create new data dicts to populate
-    new_ui_data = {}
-    new_hardware_data = {}
-    new_sound_data = {}
-    
-    # Get persistent state once with lock
-    with persistent_state_lock:
-        prev_time = persistent_state['Prev Time']
-        prev_rpm = persistent_state['Prev RPM']
-        shift_emulation = persistent_state['Shift Emulation']
-        headlights = persistent_state['Headlights']
-        hazards = persistent_state['Hazards']
-        auto_turn_signal = persistent_state['Auto Turn Signal']
-        drs = persistent_state['DRS']
-        started = persistent_state['Started']
-        engine_mute = persistent_state['Engine Mute']
-        music_mute = persistent_state['Music Mute']
-        porche = persistent_state['Porche']
-        pause = persistent_state['Pause']
-        lights_state = persistent_state['Lights']
+    # Get current persistent values from shared dicts (they persist until explicitly reset)
+    prev_time = sound_data_dict.get('Prev Time', 0)
+    prev_rpm = sound_data_dict.get('Prev RPM', 0)
+    shift_emulation = ui_data_dict.get('Shift Emulation', False)
+    headlights = ui_data_dict.get('Headlights', False)
+    hazards = ui_data_dict.get('Hazards', False)
+    auto_turn_signal = ui_data_dict.get('Auto Turn Signal', False)
+    drs = ui_data_dict.get('DRS', False)
+    started = ui_data_dict.get('Started', False)
+    engine_mute = sound_data_dict.get('Engine Mute', False)
+    music_mute = sound_data_dict.get('Music Mute', False)
+    porche = sound_data_dict.get('Porche', False)
+    pause = sound_data_dict.get('Pause', False)
+    lights_state = hardware_data_dict.get('Lights', 'Off')
 
     # Process pico data
     if pico_data:
@@ -301,23 +282,18 @@ def process_data(pico_data, arduino_data):
             # Shift Emulation Toggle
             if buttons.get('Shift Emulation Toggle', {}).get('Pressed', False):
                 shift_emulation = not shift_emulation
-                with persistent_state_lock:
-                    persistent_state['Shift Emulation'] = shift_emulation
-                new_ui_data['Shift Emulation'] = shift_emulation
-                new_ui_data['Alert Title'] = f"Shift Emulation {'ON' if shift_emulation else 'OFF'}"
-                new_ui_data['Alert Message'] = "Shift emulation mode has been toggled."
+                ui_data_dict['Shift Emulation'] = shift_emulation
+                ui_data_dict['Alert Title'] = f"Shift Emulation {'ON' if shift_emulation else 'OFF'}"
+                ui_data_dict['Alert Message'] = "Shift emulation mode has been toggled."
             
             # Headlights
             if buttons.get('Headlights', {}).get('Pressed', False):
                 headlights = not headlights
                 lights_state = "Headlights" if headlights else "Off"
-                with persistent_state_lock:
-                    persistent_state['Headlights'] = headlights
-                    persistent_state['Lights'] = lights_state
-                new_ui_data['Headlights'] = headlights
-                new_ui_data['Alert Title'] = f"Headlights {'ON' if headlights else 'OFF'}"
-                new_ui_data['Alert Message'] = "Headlights and backlights are toggled."
-                new_hardware_data['Lights'] = lights_state
+                ui_data_dict['Headlights'] = headlights
+                ui_data_dict['Alert Title'] = f"Headlights {'ON' if headlights else 'OFF'}"
+                ui_data_dict['Alert Message'] = "Headlights and backlights are toggled."
+                hardware_data_dict['Lights'] = lights_state
             
             # Hazards
             if buttons.get('Hazards', {}).get('Pressed', False):
@@ -326,91 +302,74 @@ def process_data(pico_data, arduino_data):
                     lights_state = "Hazards"
                 elif not headlights:
                     lights_state = "Off"
-                with persistent_state_lock:
-                    persistent_state['Hazards'] = hazards
-                    persistent_state['Lights'] = lights_state
-                new_ui_data['Hazards'] = hazards
-                new_ui_data['Alert Title'] = f"Hazards {'ON' if hazards else 'OFF'}"
-                new_ui_data['Alert Message'] = "All lights are flashing."
-                new_hardware_data['Lights'] = lights_state
+                ui_data_dict['Hazards'] = hazards
+                ui_data_dict['Alert Title'] = f"Hazards {'ON' if hazards else 'OFF'}"
+                ui_data_dict['Alert Message'] = "All lights are flashing."
+                hardware_data_dict['Lights'] = lights_state
             
             # Change Engine
             if buttons.get('Change Engine', {}).get('Pressed', False):
                 porche = not porche
-                with persistent_state_lock:
-                    persistent_state['Porche'] = porche
-                new_sound_data['Porche'] = porche
-                new_ui_data['Alert Title'] = "Engine Changed"
-                new_ui_data['Alert Message'] = f"Engine mode changed to {'Porche' if porche else 'F1 v10'}."
+                sound_data_dict['Porche'] = porche
+                ui_data_dict['Alert Title'] = "Engine Changed"
+                ui_data_dict['Alert Message'] = f"Engine mode changed to {'Porche' if porche else 'F1 v10'}."
                 print("[Remove Me] Giving engine change alert")
             
             # Change Music
             if buttons.get('Change Music', {}).get('Pressed', False):
-                new_sound_data["Change Track"] = True
-            else:
-                new_sound_data["Change Track"] = False
+                sound_data_dict["Change Track"] = True
             
             # DRS
             if buttons.get('DRS', {}).get('Pressed', False):
                 drs = not drs
-                with persistent_state_lock:
-                    persistent_state['DRS'] = drs
-                new_ui_data['DRS'] = drs
-                new_ui_data['Alert Title'] = f"DRS {'ON' if drs else 'OFF'}"
-                new_ui_data['Alert Message'] = "Drag Reduction System has been toggled."
-                new_hardware_data['DRS'] = drs
+                ui_data_dict['DRS'] = drs
+                ui_data_dict['Alert Title'] = f"DRS Changed"
+                ui_data_dict['Alert Message'] = f"Drag Reduction System is now {'ACTIVE' if drs else 'INACTIVE'}."
+                hardware_data_dict['DRS'] = drs
             
             # Start
             start_btn = buttons.get('Start', {})
             if start_btn.get('Pressed', False):
                 if not started:
                     started = True
-                    with persistent_state_lock:
-                        persistent_state['Started'] = started
-                    new_sound_data['Start'] = True
-                    new_ui_data['Alert Title'] = "Car Started"
-                    new_ui_data['Alert Message'] = "Car has been started."
-                    new_ui_data['Started'] = started
-                    new_hardware_data['START'] = True
+                    sound_data_dict['Start'] = True
+                    ui_data_dict['Alert Title'] = "Car Started"
+                    ui_data_dict['Alert Message'] = "Car has been started."
+                    ui_data_dict['Started'] = started
+                    hardware_data_dict['START'] = True
             
             # Launch control when held down after started
             if start_btn.get('Down', False) and started:
-                new_sound_data['Launch'] = True
+                sound_data_dict['Launch'] = True
             else:
-                new_sound_data['Launch'] = False
-                new_sound_data['Start'] = False
+                sound_data_dict['Launch'] = False
+                sound_data_dict['Start'] = False
             
             # Stop (use Pressed for alert, Down for continuous stop signal)
             stop_btn = buttons.get('Stop', {})
             if stop_btn.get('Pressed', False):
                 started = False
-                with persistent_state_lock:
-                    persistent_state['Started'] = started
-                new_ui_data['Alert Title'] = "Car Stopped"
-                new_ui_data['Alert Message'] = "Car has been turned off."
-                new_ui_data['Started'] = started
+                ui_data_dict['Alert Title'] = "Car Stopped"
+                ui_data_dict['Alert Message'] = "Car has been turned off."
+                ui_data_dict['Started'] = started
 
             if stop_btn.get('Down', False):
-                new_hardware_data['STOP'] = stop_btn.get('Down', False)
+                hardware_data_dict['STOP'] = stop_btn.get('Down', False)
 
             # Play/Pause
             if buttons.get('Play/Pause', {}).get('Pressed', False):
                 pause = not pause
-                with persistent_state_lock:
-                    persistent_state['Pause'] = pause
-                new_sound_data['Pause'] = pause
+                sound_data_dict['Pause'] = pause
             
             # Auto Turn Signal Toggle
             if buttons.get('Auto Turn Signal Toggle', {}).get('Pressed', False):
                 auto_turn_signal = not auto_turn_signal
-                with persistent_state_lock:
-                    persistent_state['Auto Turn Signal'] = auto_turn_signal
-                new_ui_data['Auto Turn Signal'] = auto_turn_signal
-                new_ui_data['Alert Title'] = f"Auto Turn Signal {'ON' if auto_turn_signal else 'OFF'}"
-                new_ui_data['Alert Message'] = "Auto turn signal has been toggled."
-            
+                ui_data_dict['Auto Turn Signal'] = auto_turn_signal
+                ui_data_dict['Alert Title'] = f"Auto Turn Signal Changed"
+                ui_data_dict['Alert Message'] = f"Auto turn signal is now {'ACTIVE' if auto_turn_signal else 'INACTIVE'}."
+
             # Horn (momentary - use Down for continuous sound while held)
-            new_sound_data['Horn'] = buttons.get('Horn', {}).get('Down', False)
+            sound_data_dict['Horn'] = buttons.get('Horn', {}).get('Down', False)
         
         # Process knobs
         if 'Knobs' in pico_data:
@@ -420,43 +379,39 @@ def process_data(pico_data, arduino_data):
             if 'Engine Vol' in knobs:
                 if knobs['Engine Vol'].get('Pressed', False):
                     engine_mute = not engine_mute
-                    with persistent_state_lock:
-                        persistent_state['Engine Mute'] = engine_mute
-                    new_ui_data['Engine Mute'] = engine_mute
+                    ui_data_dict['Engine Mute'] = engine_mute
                 
                 if engine_mute:
-                    new_sound_data['Engine Volume'] = 0
-                    new_ui_data['Engine Volume'] = 0
+                    sound_data_dict['Engine Volume'] = 0
+                    ui_data_dict['Engine Volume'] = 0
                 else:
                     volume = max(min(knobs['Engine Vol'].get('Count', 0), 100), 0)
-                    new_sound_data['Engine Volume'] = volume
-                    new_ui_data['Engine Volume'] = volume
+                    sound_data_dict['Engine Volume'] = volume
+                    ui_data_dict['Engine Volume'] = volume
             
             # Music Volume
             if 'Music Vol' in knobs:
                 if knobs['Music Vol'].get('Pressed', False):
                     music_mute = not music_mute
-                    with persistent_state_lock:
-                        persistent_state['Music Mute'] = music_mute
-                    new_ui_data['Music Mute'] = music_mute
+                    ui_data_dict['Music Mute'] = music_mute
                 
                 if music_mute:
-                    new_sound_data['Music Volume'] = 0
-                    new_ui_data['Music Volume'] = 0
+                    sound_data_dict['Music Volume'] = 0
+                    ui_data_dict['Music Volume'] = 0
                 else:
                     volume = max(min(knobs['Music Vol'].get('Count', 0), 100), 0)
-                    new_sound_data['Music Volume'] = volume
-                    new_ui_data['Music Volume'] = volume
+                    sound_data_dict['Music Volume'] = volume
+                    ui_data_dict['Music Volume'] = volume
             
             # Engine Tune
             if 'Engine Tune' in knobs:
                 if knobs['Engine Tune'].get('Pressed', False):
-                    new_ui_data['Mode Switch'] = True
+                    ui_data_dict['Mode Switch'] = True
                 
-                # Knob returns absolute position (0-100), no need to store in persistent_state
+                # Knob returns absolute position (0-100)
                 tune = max(min(knobs['Engine Tune'].get('Count', 0), 100), 0)
                 # Convert to 0-1 range for UI (dashboard expects 0-1, not 0-100)
-                new_ui_data['Engine Tune'] = tune / 100.0
+                ui_data_dict['Engine Tune'] = tune / 100.0
     
     # Process arduino data
     if arduino_data:
@@ -469,30 +424,19 @@ def process_data(pico_data, arduino_data):
                 prev_time
             )
             # accel can be True (accelerating), False (decelerating), or None (no significant change/loop)
-            new_sound_data['Accel'] = accel
-            new_sound_data['Play Speed'] = play_speed
-            new_sound_data['Idle'] = idle  # Force idle sound when RPM <= 2000
-            new_ui_data['RPM'] = rpm
-            new_ui_data['Speed'] = arduino_data['Speed']
-            new_ui_data['Throttle'] = arduino_data['Throttle'] / MAX_THROTTLE_DEG  # Convert to 0-1 for UI
-            new_hardware_data['Brake'] = arduino_data['Brake']
-            new_hardware_data['Throttle'] = arduino_data['Throttle']
-            new_hardware_data['RPM'] = rpm
+            sound_data_dict['Accel'] = accel
+            sound_data_dict['Play Speed'] = play_speed
+            sound_data_dict['Idle'] = idle  # Force idle sound when RPM <= 2000
+            ui_data_dict['RPM'] = rpm
+            ui_data_dict['Speed'] = arduino_data['Speed']
+            ui_data_dict['Throttle'] = arduino_data['Throttle'] / MAX_THROTTLE_DEG  # Convert to 0-1 for UI
+            hardware_data_dict['Brake'] = arduino_data['Brake']
+            hardware_data_dict['Throttle'] = arduino_data['Throttle']
+            hardware_data_dict['RPM'] = rpm
             
-            # Update persistent state
-            with persistent_state_lock:
-                persistent_state['Prev RPM'] = rpm
-                persistent_state['Prev Time'] = time.time()
-    
-    # Update shared dicts atomically (always latest data, no queueing)
-    if new_ui_data:
-        ui_data_dict.update(new_ui_data)
-    
-    if new_hardware_data:
-        hardware_data_dict.update(new_hardware_data)
-    
-    if new_sound_data:
-        sound_data_dict.update(new_sound_data)
+            # Update persistent values for next calculation
+            sound_data_dict['Prev RPM'] = rpm
+            sound_data_dict['Prev Time'] = time.time()
 
 def lights_boot_anim():
     time.sleep(3)
@@ -504,15 +448,14 @@ def lights_boot_anim():
         time.sleep(0.3)
     lights.turn_off_all()
 
-def hardware_process(interrupted_event, ui_dict, hw_dict, sound_dict, state_lock):
+def hardware_process(interrupted_event, ui_dict, hw_dict, sound_dict):
     """Main hardware process - runs on separate CPU core, avoiding GIL with UI"""
-    global pico, arduino, lights, ui_data_dict, hardware_data_dict, sound_data_dict, persistent_state_lock
+    global pico, arduino, lights, ui_data_dict, hardware_data_dict, sound_data_dict
     
     # Set up process-local variables
     ui_data_dict = ui_dict
     hardware_data_dict = hw_dict
     sound_data_dict = sound_dict
-    persistent_state_lock = state_lock
     
     print("[Hardware Process] Starting...")
     
@@ -616,7 +559,7 @@ def audio_process(interrupted_event, sound_dict):
 def boot():
     print("Booting up system with multiprocessing (UI on separate CPU core)...")
 
-    global dashboard, interrupted, ui_data_dict, hardware_data_dict, sound_data_dict, persistent_state_lock
+    global dashboard, interrupted, ui_data_dict, hardware_data_dict, sound_data_dict
     
     # Initialize multiprocessing primitives
     interrupted = multiprocessing.Event()
@@ -624,7 +567,6 @@ def boot():
     ui_data_dict = manager.dict()
     hardware_data_dict = manager.dict()
     sound_data_dict = manager.dict()
-    persistent_state_lock = multiprocessing.Lock()
     
     hw_process = None
     audio_proc = None
@@ -633,7 +575,7 @@ def boot():
         # Start hardware process (runs on separate CPU core - no GIL conflict!)
         hw_process = multiprocessing.Process(
             target=hardware_process,
-            args=(interrupted, ui_data_dict, hardware_data_dict, sound_data_dict, persistent_state_lock),
+            args=(interrupted, ui_data_dict, hardware_data_dict, sound_data_dict),
             daemon=False
         )
         hw_process.start()
