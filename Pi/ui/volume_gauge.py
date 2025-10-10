@@ -118,7 +118,7 @@ class VolumeGaugeWidget(QWidget):
             return
 
         bar_rect = self._bar_rect
-        fill_height = ((bar_rect.height()-5) * self.volume_level / 100)
+        fill_height = ((bar_rect.height()-3) * self.volume_level / 100)
         fill_rect = QRectF(
             bar_rect.x() + self._fill_padding,
             bar_rect.y() + bar_rect.height() - fill_height - self._fill_padding,
