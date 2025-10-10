@@ -9,7 +9,7 @@ serialization overhead of ``multiprocessing.Manager`` objects.
 from __future__ import annotations
 
 import time
-from typing import Dict, Optional
+from typing import Dict, Iterable, Optional
 
 from PySide6.QtCore import QObject, Qt, QTimer, Signal, Slot
 
@@ -100,9 +100,6 @@ class HardwareWorker(QObject):
 
         self._last_ui_payload: Dict[str, float | int | str | bool] = {}
         self._last_sound_payload: Dict[str, float | int | bool | None] = {}
-        # Track previous down-state so we can detect edges even if the
-        # firmware misses a transient "Pressed" flag for a poll cycle.
-        self._button_down_states: Dict[str, bool] = {}
 
     @Slot()
     def start(self) -> None:
@@ -231,19 +228,28 @@ class HardwareWorker(QObject):
         if not buttons:
             return
 
+        pressed_buttons = {
+            name
+            for name, payload in buttons.items()
+            if payload.get("Press State") or payload.get("Pressed")
+        }
+        consumable_buttons = {
+            name for name, payload in buttons.items() if payload.get("Press State")
+        }
+
         def toggle_flag(key: str) -> bool:
             new_state = not bool(self._ui_state.get(key, False))
             self._ui_state[key] = new_state
             return new_state
 
-        if self._is_button_pressed("Shift Emulation Toggle", buttons):
+        if "Shift Emulation Toggle" in pressed_buttons:
             new_state = toggle_flag("Shift Emulation")
             self._set_alert(
                 f"Shift Emulation {'ON' if new_state else 'OFF'}",
                 "Shift emulation mode has been toggled.",
             )
 
-        if self._is_button_pressed("Headlights", buttons):
+        if "Headlights" in pressed_buttons:
             new_state = toggle_flag("Headlights")
             self._ui_state["Hazards"] = False if new_state else self._ui_state["Hazards"]
             if self._lights:
@@ -253,7 +259,7 @@ class HardwareWorker(QObject):
                 "Headlights and backlights are toggled.",
             )
 
-        if self._is_button_pressed("Hazards", buttons):
+        if "Hazards" in pressed_buttons:
             new_state = toggle_flag("Hazards")
             if self._lights:
                 (self._lights.toggle_all() if new_state else self._lights.turn_off_all())
@@ -262,7 +268,7 @@ class HardwareWorker(QObject):
                 "All lights are flashing.",
             )
 
-        if self._is_button_pressed("Change Engine", buttons):
+        if "Change Engine" in pressed_buttons:
             new_state = toggle_flag("Porche")
             self._sound_state["Porche"] = new_state
             self._set_alert(
@@ -270,17 +276,17 @@ class HardwareWorker(QObject):
                 f"Engine mode changed to {'Porche' if new_state else 'F1 v10'}.",
             )
 
-        if self._is_button_pressed("Change Music", buttons):
+        if "Change Music" in pressed_buttons:
             self._sound_state["Change Track"] = True
 
-        if self._is_button_pressed("DRS", buttons):
+        if "DRS" in pressed_buttons:
             new_state = toggle_flag("DRS")
             self._set_alert(
                 "DRS Changed",
                 f"Drag Reduction System is now {'ACTIVE' if new_state else 'INACTIVE'}.",
             )
 
-        start_pressed = self._is_button_pressed("Start", buttons)
+        start_pressed = "Start" in pressed_buttons
         start_btn = buttons.get("Start", {})
         if start_pressed and not self._ui_state["Started"]:
             self._ui_state["Started"] = True
@@ -297,18 +303,18 @@ class HardwareWorker(QObject):
         else:
             self._sound_state["Launch"] = False
 
-        stop_pressed = self._is_button_pressed("Stop", buttons)
+        stop_pressed = "Stop" in pressed_buttons
         stop_btn = buttons.get("Stop", {})
         if stop_pressed:
             self._ui_state["Started"] = False
             self._sound_state["Start"] = False
             self._set_alert("Car Stopped", "Car has been turned off.")
 
-        if self._is_button_pressed("Play/Pause", buttons):
+        if "Play/Pause" in pressed_buttons:
             new_state = toggle_flag("Pause")
             self._sound_state["Pause"] = new_state
 
-        if self._is_button_pressed("Auto Turn Signal Toggle", buttons):
+        if "Auto Turn Signal Toggle" in pressed_buttons:
             new_state = toggle_flag("Auto Turn Signal")
             self._set_alert(
                 "Auto Turn Signal Changed",
@@ -317,31 +323,24 @@ class HardwareWorker(QObject):
 
         self._sound_state["Horn"] = bool(buttons.get("Horn", {}).get("Down"))
 
-        # Persist updated down states for next poll comparison
-        for name, payload in buttons.items():
-            self._button_down_states[name] = bool(payload.get("Down"))
-
-    def _is_button_pressed(self, name: str, buttons: dict) -> bool:
-        payload = buttons.get(name, {})
-        if not payload:
-            return False
-
-        down = bool(payload.get("Down"))
-        pressed = bool(payload.get("Pressed"))
-
-        if not pressed:
-            prev_down = self._button_down_states.get(name, False)
-            pressed = down and not prev_down
-
-        return pressed
+        self._consume_press_states(consumable_buttons)
 
     def _handle_pico_knobs(self, knobs: dict) -> None:
         if not knobs:
             return
 
         engine_knob = knobs.get("Engine Vol")
+        pressed_knobs = {
+            name
+            for name, payload in knobs.items()
+            if payload.get("Press State") or payload.get("Pressed")
+        }
+        consumable_knobs = {
+            name for name, payload in knobs.items() if payload.get("Press State")
+        }
+
         if engine_knob:
-            if engine_knob.get("Pressed"):
+            if "Engine Vol" in pressed_knobs:
                 new_state = not bool(self._ui_state.get("Engine Mute"))
                 self._ui_state["Engine Mute"] = new_state
             if self._ui_state["Engine Mute"]:
@@ -353,7 +352,7 @@ class HardwareWorker(QObject):
 
         music_knob = knobs.get("Music Vol")
         if music_knob:
-            if music_knob.get("Pressed"):
+            if "Music Vol" in pressed_knobs:
                 new_state = not bool(self._ui_state.get("Music Mute"))
                 self._ui_state["Music Mute"] = new_state
             if self._ui_state["Music Mute"]:
@@ -365,10 +364,12 @@ class HardwareWorker(QObject):
 
         tune_knob = knobs.get("Engine Tune")
         if tune_knob:
-            if tune_knob.get("Pressed"):
+            if "Engine Tune" in pressed_knobs:
                 self._ui_state["Mode Switch"] = True
             tune_value = _clamp(tune_knob.get("Count", 0) / 100.0, 0.0, 1.0)
             self._ui_state["Engine Tune"] = tune_value
+
+        self._consume_press_states(consumable_knobs)
 
     def _calculate_speed_rpm(
         self,
@@ -448,6 +449,14 @@ class HardwareWorker(QObject):
     def _set_alert(self, title: str, message: str) -> None:
         self._ui_state["Alert Title"] = title
         self._ui_state["Alert Message"] = message
+
+    def _consume_press_states(self, names: Iterable[str]) -> None:
+        if not names or not self._pico:
+            return
+        try:
+            self._pico.send({"command": "consume states", "button": names})
+        except Exception as exc:  # pragma: no cover - best effort
+            self.error.emit(f"Failed to consume state for {names}: {exc}")
 
 
 class AudioWorker(QObject):

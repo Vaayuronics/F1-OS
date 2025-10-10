@@ -25,6 +25,7 @@ class Button:
         self._last_read_time = 0.0
         self._last_state = GPIO.input(self.gpio_pin)
         self._prev_button_down = False  # Track previous state for edge detection
+        self.button_pressed = False  # Persistent pressed state for external use
 
     def poll(self) -> bool:
         """Read the GPIO pin and update internal pressed state.
@@ -53,11 +54,25 @@ class Button:
         elif raw == 1 and self.button_down:
             self.button_down = False
 
+        if self.was_pressed():
+            self.button_pressed = True
+
         return (self.button_down, self.was_pressed())
 
     def get_state(self) -> bool:
         """Returns True if the button is down (pressed)."""
         return self.button_down
+    
+    def clear_pressed(self) -> None:
+        """Clears the pressed state."""
+        self.button_pressed = False
+
+    def get_press_state(self) -> bool:
+        """Returns True if the button has been pressed since last cleared.
+        
+        Call clear_pressed() to reset this state.
+        """
+        return self.button_pressed
     
     def was_pressed(self) -> bool:
         """Returns True only on the moment the button was pressed (rising edge).

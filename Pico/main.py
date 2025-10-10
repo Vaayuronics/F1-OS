@@ -70,8 +70,8 @@ def process_command(command: dict) -> None:
         state = {
             'Status': 'Polled',
             'Gyro': gyro.get_angles(),
-            'Buttons': {b.get_name(): {"Down": b.get_state(), "Pressed": b.was_pressed()} for b in buttons},
-            'Knobs': {k.get_name(): {"Count": k.get_count(), "Down": k.get_switch(), "Pressed": k.switch_was_pressed()} for k in knobs}
+            'Buttons': {b.get_name(): {"Down": b.get_state(), "Pressed": b.was_pressed(), "Press State": b.get_press_state()} for b in buttons},
+            'Knobs': {k.get_name(): {"Count": k.get_count(), "Down": k.get_switch(), "Pressed": k.switch_was_pressed(), "Press State": k.get_press_state()} for k in knobs}
         }
         sys.stdout.write(json.dumps(state) + '\n')
     elif command.get("command") == "stop":
@@ -85,6 +85,16 @@ def process_command(command: dict) -> None:
         for k in knobs:
             k.set_count(100)
         #sys.stdout.write(json.dumps({"status": "knobs reset"}) + '\n')
+    elif command.get("command") == "consume states":
+        button_names = command.get("buttons")
+        for name in button_names:
+            for b in buttons:
+                if b.get_name() == name:
+                    b.clear_pressed()
+            for k in knobs:
+                if k.get_name() == name:
+                    k.clear_pressed()
+        sys.stdout.write(json.dumps({"status": "states consumed"}) + '\n')
     else:
         sys.stdout.write(json.dumps({"status": "unknown command"}) + '\n')
 

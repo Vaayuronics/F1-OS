@@ -10,13 +10,28 @@ class JSONSerialReader:
         self.ser.reset_input_buffer()
         self.ser.reset_output_buffer()
         time.sleep(0.1)  # Allow time for buffer clearing
-        
+
+    def send_receive(self, data: dict) -> dict:
+        self.send(data)
+        return self.receive()
+  
     def poll(self) -> dict:
+        return self.send_receive({"command": "poll"})
+    
+    def consume(self, button_name : list[str]) -> dict:
+        return self.send_receive({"command": "consume states", "buttons": button_name})
+
+    def get_latest(self):
+        return self.latest_json
+
+    def send(self, obj):
         while self.ser.in_waiting > 0:
             self.ser.readline()  # Clear out any old data
+        line = json.dumps(obj) + '\n'
+        self.ser.write(line.encode())
+        self.ser.flush()  # Make sure data is sent immediately
 
-        self.send({"command": "poll"})
-
+    def receive(self) -> dict:
         while self.ser.in_waiting == 0:
             time.sleep(0.01)  # Wait for data to arrive
 
@@ -30,11 +45,3 @@ class JSONSerialReader:
             except Exception as e:
                 print(f"Error reading: {e}")
         return None
-
-    def get_latest(self):
-        return self.latest_json
-
-    def send(self, obj):
-        line = json.dumps(obj) + '\n'
-        self.ser.write(line.encode())
-        self.ser.flush()  # Make sure data is sent immediately

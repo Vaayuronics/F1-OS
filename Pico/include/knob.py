@@ -22,6 +22,7 @@ class Knob:
         self._last_read_time = 0.0
         self._last_sw_state = self.sw.value() if self.sw else 1
         self._prev_button_down = False  # Track previous state for edge detection
+        self.button_pressed = False  # Persistent pressed state for external use
 
     def update_encoder(self) -> int:
         '''Checks the clk and dt pins to increment the encoder.\n
@@ -68,6 +69,9 @@ class Knob:
         elif raw == 1 and self.button_down:
             self.button_down = False
 
+        if self.switch_was_pressed():
+            self.button_pressed = True
+
         return self.button_down
 
     def poll(self) -> dict:
@@ -79,7 +83,8 @@ class Knob:
         return {
             "Count": self.counter,
             "Down": self.button_down,
-            "Pressed": self.switch_was_pressed()
+            "Pressed": self.switch_was_pressed(),
+            "Press State": self.button_pressed
         }
 
     def get_count(self) -> int:
@@ -107,6 +112,15 @@ class Knob:
         This detects the transition from not-pressed to pressed.\n
         Call poll() before this to get current state.'''
         return self.button_down and not self._prev_button_down
+    
+    def clear_pressed(self) -> None:
+        '''Clears the pressed state.'''
+        self.button_pressed = False
+
+    def get_press_state(self) -> bool:
+        '''Returns True if the button has been pressed since last cleared.\n
+        Call clear_pressed() to reset this state.'''
+        return self.button_pressed
     
     def switch_was_released(self) -> bool:
         '''Returns True only on the moment the switch was released (falling edge).\n
