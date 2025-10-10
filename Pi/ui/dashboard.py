@@ -577,9 +577,9 @@ class F1Dashboard(QMainWindow):
 
         label_widget = QLabel()
         label_widget.setStyleSheet(f"color: #AAA; font-size: {base_font_size}px;")
-        label_widget.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Preferred)
+        label_widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
         label_widget.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        label_widget.setMinimumWidth(max(60, int(base_font_size * 2.5)))
+        label_widget.setFixedWidth(max(60, int(base_font_size * 2.5)))
 
         value_widget = QLabel()
         value_widget.setStyleSheet(f"color: white; font-size: {base_font_size}px; font-weight: bold;")
