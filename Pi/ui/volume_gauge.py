@@ -89,9 +89,9 @@ class VolumeGaugeWidget(QWidget):
 
         self._bar_rect = QRectF(
             center_x - icon_width / 4,
-            self._icon_rect.y() + icon_height * 0.2,
+            self._icon_rect.y() + icon_height * 0.22,
             icon_width / 2,
-            icon_height * 0.6
+            icon_height * 0.55
         )
 
         painter.setPen(QPen(QColor(150, 150, 150), 3))

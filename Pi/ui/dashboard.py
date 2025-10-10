@@ -573,18 +573,19 @@ class F1Dashboard(QMainWindow):
         """Create a reusable telemetry row widget."""
         row_layout = QHBoxLayout()
         row_layout.setContentsMargins(0, 0, 0, 0)
-        
+        row_layout.setSpacing(6)
+
         label_widget = QLabel()
         label_widget.setStyleSheet(f"color: #AAA; font-size: {base_font_size}px;")
-        label_widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
-        label_widget.setWordWrap(True)
-        
+        label_widget.setSizePolicy(QSizePolicy.Minimum, QSizePolicy.Preferred)
+        label_widget.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+
         value_widget = QLabel()
         value_widget.setStyleSheet(f"color: white; font-size: {base_font_size}px; font-weight: bold;")
-        value_widget.setSizePolicy(QSizePolicy.Preferred, QSizePolicy.Preferred)
-        value_widget.setWordWrap(True)
-        
-        row_layout.addWidget(label_widget, 1)
+        value_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        value_widget.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+
+        row_layout.addWidget(label_widget, 0)
         row_layout.addWidget(value_widget, 1)
         
         row_widget = QWidget()

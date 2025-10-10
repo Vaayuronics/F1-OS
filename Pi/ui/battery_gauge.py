@@ -85,7 +85,7 @@ class BatteryGaugeWidget(QWidget):
 
         rect = self.rect()
         icon_width = rect.width() * 0.6
-        icon_height = rect.height() * 0.5
+        icon_height = rect.height() * 0.47
         icon_x = (rect.width() - icon_width) / 2
         icon_y = rect.height() * 0.15
 

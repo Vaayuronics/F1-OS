@@ -247,7 +247,8 @@ class GaugeWidget(QWidget):
         if self.throttle > 0:
             gradient = QConicalGradient(geom["center"], start_angle - 90)
             gradient.setColorAt(0.0, QColor(0, 255, 0))
-            gradient.setColorAt(0.5, QColor(255, 165, 0))
+            gradient.setColorAt(0.33, QColor(255, 255, 0))
+            gradient.setColorAt(0.66, QColor(255, 165, 0))
             gradient.setColorAt(1.0, QColor(255, 0, 0))
             painter.setPen(QPen(QBrush(gradient), arc_thickness, Qt.SolidLine, Qt.RoundCap))
             painter.drawArc(
@@ -302,8 +303,10 @@ class GaugeWidget(QWidget):
         if progress <= 0:
             return
 
-        if progress < 0.7:
+        if progress < 0.5:
             gradient_color = QColor(0, 255, 0)
+        elif progress < 0.7:
+            gradient_color = QColor(255, 255, 0)
         elif progress < 0.9:
             gradient_color = QColor(255, 165, 0)
         else:
