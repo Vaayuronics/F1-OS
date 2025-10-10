@@ -88,8 +88,8 @@ def get_ui_data():
     if ui_data_dict:
         data = dict(ui_data_dict)
         # Clear alert messages after reading
-        ui_data_dict.pop("Alert Title", None)
-        ui_data_dict.pop("Alert Message", None)
+        ui_data_dict["Alert Title"] = ""
+        ui_data_dict["Alert Message"] = ""
         return data  # Return copy to avoid issues
     return None
 

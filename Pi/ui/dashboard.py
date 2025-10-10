@@ -283,8 +283,9 @@ class F1Dashboard(QMainWindow):
         self.engine_tune_value = 0.0
         self.regen_brake_value = 0.0
         
-        # Alert queue for telemetry display (lightweight notification system)
-        self.alert_queue = []  # List of (title, message, timestamp) tuples
+        # Current alert for telemetry display (lightweight notification system)
+        self.current_alert_title = ""
+        self.current_alert_message = ""
     
     def run(self):
         """Show the dashboard and run the application."""
@@ -348,11 +349,13 @@ class F1Dashboard(QMainWindow):
         if 'Alert Title' in data:
             alert_title = data['Alert Title']
             alert_text = data.get('Alert Message', "")
-            # Get current time and format as HH:MM:SS
-            current_time = datetime.datetime.now().strftime("%H:%M:%S")
-            formatted_title = f"{alert_title} {current_time}"
-            self.show_notification(formatted_title, alert_text)
-            print("[Remove Me] Receiving change from alert system")
+            # Update telemetry display directly with alert data
+            if alert_title != "":  # Only update if there's an actual alert
+                # Get current time and format as HH:MM:SS
+                current_time = datetime.datetime.now().strftime("%H:%M:%S")
+                formatted_title = f"{alert_title} {current_time}"
+                self.updateTelemetryDisplay(formatted_title, alert_text)
+                print(f"[Remove Me] Receiving change from alert system\nTitle: {alert_title}\nMessage: {alert_text}")
     
     def enable_fullscreen(self):
         """Enable borderless fullscreen mode suitable for Raspberry Pi."""
@@ -550,21 +553,7 @@ class F1Dashboard(QMainWindow):
         """Get the current right bar mode ('engine' or 'regen')."""
         return self.right_bar_mode
     
-    def show_notification(self, title, subtitle=""):
-        """
-        Show alert in telemetry box (lightweight notification system).
-        
-        Args:
-            title (str): Alert title
-            subtitle (str): Alert message (optional)
-        """
-        # Add alert as tuple (title, message)
-        self.alert_queue.append((title, subtitle))
-        # Keep only last 3 alerts to avoid clutter
-        if len(self.alert_queue) > 3:
-            self.alert_queue.pop(0)
 
-        self.updateTelemetryDisplay()
     
     def setWheelRotation(self, angle_degrees):
         """Set the wheel rotation angle in degrees."""
@@ -614,31 +603,43 @@ class F1Dashboard(QMainWindow):
         
         return row_widget, label_widget, value_widget
     
-    def updateTelemetryDisplay(self):
-        """Update telemetry display - now shows alerts only."""
-        # Show alerts in telemetry box
-        num_alerts = len(self.alert_queue)
+    def updateTelemetryDisplay(self, alert_title="", alert_message=""):
+        """Update telemetry display with current alert.
         
-        if num_alerts == 0:
-            # Hide all rows if no alerts
+        Args:
+            alert_title (str): Alert title to display
+            alert_message (str): Alert message/subtitle to display
+        """
+        # Store current alert
+        self.current_alert_title = alert_title
+        self.current_alert_message = alert_message
+        
+        if not alert_title:
+            # Hide all rows if no alert
             for i in range(self._max_telemetry_rows):
                 self._telemetry_widget_pool[i]['row'].hide()
             return
         
-        # Show alerts (newest at top)
-        for i in range(min(num_alerts, self._max_telemetry_rows)):
-            alert_idx = num_alerts - 1 - i  # Reverse order (newest first)
-            alert_title, alert_message = self.alert_queue[alert_idx]
-            pool_entry = self._telemetry_widget_pool[i]
-            
-            # Show title on left, message on right
-            pool_entry['label'].setText(f"🔔 {alert_title}")
-            pool_entry['value'].setText(alert_message)
-            pool_entry['row'].show()
+        # Show title in first row
+        pool_entry = self._telemetry_widget_pool[0]
+        pool_entry['label'].setText("Alert:")
+        pool_entry['value'].setText(alert_title)
+        pool_entry['row'].show()
         
-        # Hide unused rows
-        for i in range(num_alerts, self._max_telemetry_rows):
-            self._telemetry_widget_pool[i]['row'].hide()
+        # Show message in second row if provided
+        if alert_message:
+            pool_entry_msg = self._telemetry_widget_pool[1]
+            pool_entry_msg['label'].setText("")
+            pool_entry_msg['value'].setText(alert_message)
+            pool_entry_msg['row'].show()
+            
+            # Hide remaining rows
+            for i in range(2, self._max_telemetry_rows):
+                self._telemetry_widget_pool[i]['row'].hide()
+        else:
+            # Hide remaining rows if no message
+            for i in range(1, self._max_telemetry_rows):
+                self._telemetry_widget_pool[i]['row'].hide()
     
     def clearLayout(self, layout):
         """Helper method to clear a layout recursively."""
