@@ -6,7 +6,6 @@ cd /home/kp101/Desktop/F1-OS/Pi/
 # CONFIGURATION
 ##############################################
 ENABLE_LOGGING=false  # Set to true to enable performance logging
-ENABLE_GPU=true       # Set to false to run without GPU acceleration
 
 ##############################################
 # Global Variables
@@ -99,7 +98,6 @@ if [ "$ENABLE_LOGGING" = true ]; then
     # System info
     echo "=== System Info ===" >> "$LOG_FILE"
     cat /proc/cpuinfo | grep "Model" >> "$LOG_FILE"
-    vcgencmd get_mem gpu >> "$LOG_FILE"
     vcgencmd measure_temp >> "$LOG_FILE"
     echo "" >> "$LOG_FILE"
 
@@ -135,115 +133,14 @@ git fetch
 git pull
 
 ##############################################
-# GPU Detection and Setup
-##############################################
-GPU_AVAILABLE=false
-
-if [ "$ENABLE_GPU" = true ]; then
-    echo "Checking GPU availability..."
-    
-    # Load GPU kernel modules if not already loaded
-    if ! lsmod | grep -q "vc4"; then
-        echo "  Loading vc4 GPU module..."
-        sudo modprobe vc4 2>/dev/null
-    fi
-
-    if ! lsmod | grep -q "v3d"; then
-        echo "  Loading v3d GPU module..."
-        sudo modprobe v3d 2>/dev/null
-    fi
-
-    # Check if DRM device exists
-    if [ -e /dev/dri/card0 ]; then
-        GPU_AVAILABLE=true
-        echo "✓ GPU detected at /dev/dri/card0"
-        
-        # Show GPU module status
-        echo "  GPU Modules loaded:"
-        lsmod | grep -E "v3d|vc4" | awk '{print "    - " $1}'
-        
-        # Show GPU temperature
-        GPU_TEMP=$(vcgencmd measure_temp 2>/dev/null)
-        if [ ! -z "$GPU_TEMP" ]; then
-            echo "  GPU Temperature: $GPU_TEMP"
-        fi
-        
-        # Check for Mesa/OpenGL ES
-        if command -v glxinfo &> /dev/null; then
-            GL_RENDERER=$(glxinfo 2>/dev/null | grep "OpenGL renderer" | cut -d ':' -f 2)
-            if [ ! -z "$GL_RENDERER" ]; then
-                echo "  OpenGL Renderer:$GL_RENDERER"
-            fi
-        fi
-    else
-        echo "✗ GPU not found at /dev/dri/card0"
-        echo "  See GPU_SETUP.md for setup instructions"
-    fi
-else
-    echo "GPU acceleration disabled in config"
-fi
-
-##############################################
-# Detect if rpi-connect or X11 session is running
-##############################################
-AVOID_EGLFS=false
-
-# Check if rpi-connect is running (it needs X11/Wayland)
-if pgrep -f "rpi-connect" > /dev/null; then
-    echo "⚠ rpi-connect detected - will avoid EGLFS to prevent conflicts"
-    AVOID_EGLFS=true
-fi
-
-# Check if DISPLAY is set (X11 session active)
-if [ ! -z "$DISPLAY" ]; then
-    echo "ℹ X11 session detected (DISPLAY=$DISPLAY)"
-    AVOID_EGLFS=true
-fi
-
-##############################################
-# Start Application with Appropriate Settings
+# Start Application
 ##############################################
 echo ""
 echo "Starting F1-OS..."
 echo "============================================"
 
-# Determine Qt platform to use
-if [ "$GPU_AVAILABLE" = true ] && [ "$AVOID_EGLFS" = false ]; then
-    # Use EGLFS for direct GPU rendering (best performance)
-    echo "Mode: EGLFS (Direct GPU rendering with OpenGL ES 2.0)"
-    QT_QPA_PLATFORM=eglfs \
-    QT_QPA_EGLFS_INTEGRATION=eglfs_kms \
-    QT_QPA_EGLFS_KMS_CONFIG=/home/kp101/Desktop/F1-OS/Pi/kms_config.json \
-    QT_OPENGL=es2 \
-    QT_XCB_GL_INTEGRATION=xcb_egl \
-    QT_QUICK_BACKEND=opengles \
-    QSG_RENDER_LOOP=threaded \
-    QSG_INFO=1 \
-    MESA_GL_VERSION_OVERRIDE=3.1 \
-    MESA_GLSL_VERSION_OVERRIDE=310 \
-    python main.py &
-    PYTHON_PID=$!
-    
-elif [ "$GPU_AVAILABLE" = true ] && [ "$AVOID_EGLFS" = true ]; then
-    # Use XCB (X11) with GPU acceleration when X11 is needed
-    echo "Mode: XCB (X11 with GPU acceleration, OpenGL ES 2.0)"
-    QT_QPA_PLATFORM=xcb \
-    QT_OPENGL=es2 \
-    QT_XCB_GL_INTEGRATION=xcb_egl \
-    QT_QUICK_BACKEND=opengles \
-    QSG_RENDER_LOOP=threaded \
-    QSG_INFO=1 \
-    MESA_GL_VERSION_OVERRIDE=3.1 \
-    MESA_GLSL_VERSION_OVERRIDE=310 \
-    python main.py &
-    PYTHON_PID=$!
-    
-else
-    # No GPU or fallback mode
-    echo "Mode: Auto-detect (No GPU acceleration)"
-    python main.py &
-    PYTHON_PID=$!
-fi
+python main.py &
+PYTHON_PID=$!
 
 echo "Python PID: $PYTHON_PID"
 echo "============================================"

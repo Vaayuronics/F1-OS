@@ -1,7 +1,7 @@
 from PySide6.QtWidgets import (QMainWindow, QFrame, QSplitter, 
                               QSizePolicy, QWidget, QVBoxLayout, QLabel, QHBoxLayout, QApplication, QScrollArea)
-from PySide6.QtCore import Qt, QSettings, QSize, QTimer
-from PySide6.QtGui import QFont, QSurfaceFormat
+from PySide6.QtCore import Qt, QSettings, QSize, QTimer, Slot
+from PySide6.QtGui import QFont
 from ui.gauge import GaugeWidget
 from ui.car2d import Car2DWidget
 from ui.battery_gauge import BatteryGaugeWidget
@@ -22,31 +22,13 @@ class F1Dashboard(QMainWindow):
         """Initialize the dashboard with all widgets and layouts.""" 
         # Create QApplication if it doesn't exist
         if not QApplication.instance():
-            
-            # Configure OpenGL surface format for GPU rendering
-            fmt = QSurfaceFormat()
-            fmt.setRenderableType(QSurfaceFormat.OpenGLES)  # Force OpenGL ES (guaranteed on RPi 4)
-            fmt.setVersion(2, 0)  # OpenGL ES 2.0
-            fmt.setProfile(QSurfaceFormat.NoProfile)  # ES doesn't use profiles
-            fmt.setSwapBehavior(QSurfaceFormat.DoubleBuffer)  # Double buffering for smooth rendering
-            fmt.setSwapInterval(1)  # VSync on (prevent tearing)
-            fmt.setDepthBufferSize(24)  # 24-bit depth buffer
-            fmt.setStencilBufferSize(8)  # 8-bit stencil buffer
-            fmt.setSamples(0)  # Disable MSAA to reduce GPU load (can enable if GPU has headroom)
-            QSurfaceFormat.setDefaultFormat(fmt)
-            print("[Dashboard] Configured OpenGL ES 2.0 surface format for GPU rendering")
-            
-            # Set Qt application attributes for GPU acceleration
-            QApplication.setAttribute(Qt.AA_UseOpenGLES, True)  # Force OpenGL ES backend
-            QApplication.setAttribute(Qt.AA_UseSoftwareOpenGL, False)  # Disable software fallback
-            QApplication.setAttribute(Qt.AA_ShareOpenGLContexts, True)  # Share GL contexts (better performance)
-
+            QApplication.setAttribute(Qt.AA_DontCreateNativeWidgetSiblings)
+            QApplication.setAttribute(Qt.AA_DisableHighDpiScaling)
             self.app = QApplication(sys.argv)
             self.app.setStyle('Fusion')  # Use Fusion style for a more modern look
             self.app.setApplicationName("F1-OS")
             self.app.setOrganizationName("F1-OS")
-            
-            print("[Dashboard] QApplication created with GPU rendering enabled")
+            print("[Dashboard] QApplication created (software rendering mode)")
         else:
             self.app = QApplication.instance()
             
@@ -57,15 +39,10 @@ class F1Dashboard(QMainWindow):
         self.setWindowFlags(Qt.FramelessWindowHint)  # Remove window frame/title bar
         self.setMinimumSize(480, 600)  # Reduced minimum width to match screen
         self.setStyleSheet("background-color: #121212;")
-        
-        # Enable GPU-accelerated rendering for this window
-        self.setAttribute(Qt.WA_OpaquePaintEvent)  # Tell Qt we paint entire widget (optimization)
-        self.setAttribute(Qt.WA_NoSystemBackground)  # Don't waste time painting background
-        self.setAttribute(Qt.WA_DontCreateNativeAncestors)  # Reduce widget overhead
-        
-        # Note: GPU acceleration comes from the platform plugin (EGLFS) set via start.sh
-        # Qt's raster engine is hardware-accelerated via V3D GPU driver when properly configured
-        # with OpenGL ES 2.0 (see start.sh for environment variable configuration)
+
+        self.setAttribute(Qt.WA_OpaquePaintEvent)
+        self.setAttribute(Qt.WA_NoSystemBackground)
+        self.setAttribute(Qt.WA_DontCreateNativeAncestors)
         
         # Set up settings from file path
         if settings_file_path:
@@ -74,6 +51,8 @@ class F1Dashboard(QMainWindow):
             self.settings = QSettings("ui/dashboard_settings.ini", QSettings.IniFormat)
         
         self.telemetry_resize_callbacks = []
+        self.external_data_source = None
+        self._pending_data = None
         
         # No longer using 3D model - using 2D vector graphics instead
         self.model_path = None
@@ -298,6 +277,14 @@ class F1Dashboard(QMainWindow):
     def set_data_source(self, data_getter_func):
         """Set a function that returns the latest data dict."""
         self.external_data_source = data_getter_func
+
+    @Slot(dict)
+    def update_from_data(self, data: dict):
+        """Slot used by worker threads to push telemetry updates."""
+        if not data:
+            return
+        self._pending_data = dict(data)
+        self._apply_data_dict(self._pending_data)
     
     def set_interrupted_event(self, event):
         """Set the threading.Event that signals shutdown."""
@@ -316,6 +303,9 @@ class F1Dashboard(QMainWindow):
                 self.data_timer.stop()
             except Exception as e:
                 print(f"[Dashboard] Error pulling data: {e}")
+        elif self._pending_data:
+            self._apply_data_dict(self._pending_data)
+            self._pending_data = None
     
     def _apply_data_dict(self, data: dict):
         """Apply telemetry data to widgets. Must run on the UI thread."""
@@ -666,8 +656,8 @@ class F1Dashboard(QMainWindow):
                 # Apply the sizes only if we have the right number of elements
                 if len(sizes) == self.main_splitter.count():
                     self.main_splitter.setSizes(sizes)
-                    # Force the layout to update immediately
-                    self.main_splitter.refresh()
+                    # Trigger a repaint so the splitter reflects saved values
+                    self.main_splitter.update()
                     print(f"Loaded splitter sizes: {sizes}")
                     return True  # Successfully loaded
             except (ValueError, TypeError) as e:
@@ -706,6 +696,7 @@ class F1Dashboard(QMainWindow):
                 if len(sizes) == self.bottom_splitter.count():
                     self.bottom_splitter.setSizes(sizes)
                     print(f"Loaded bottom splitter sizes: {sizes}")
+                    return True
                 else:
                     print(f"Bottom splitter size mismatch: saved {len(sizes)}, current {self.bottom_splitter.count()}")
             except Exception as e:

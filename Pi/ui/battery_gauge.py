@@ -1,7 +1,6 @@
-import math
 from PySide6.QtWidgets import QWidget
 from PySide6.QtGui import (
-    QPainter, QPen, QBrush, QColor, QFont, QPainterPath
+    QPainter, QPen, QBrush, QColor, QFont, QPainterPath, QPixmap
 )
 from PySide6.QtCore import (
     Qt, QRect, QRectF
@@ -19,6 +18,11 @@ class BatteryGaugeWidget(QWidget):
         
         # Cache previous value to avoid unnecessary repaints
         self._prev_battery_level = -1
+        self._static_cache = None
+        self._cached_size = None
+        self._battery_rect = None
+        self._terminal_rect = None
+        self._padding = 4
     
     def setBatteryLevel(self, level):
         """Set the battery level (0-100)."""
@@ -32,6 +36,11 @@ class BatteryGaugeWidget(QWidget):
     def getBatteryLevel(self):
         """Get the current battery level."""
         return self.battery_level
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._static_cache = None
+        self._cached_size = None
     
     def mousePressEvent(self, event):
         """Handle mouse clicks on the battery gauge to close the application."""
@@ -50,77 +59,87 @@ class BatteryGaugeWidget(QWidget):
         painter.setRenderHint(QPainter.TextAntialiasing, False)  # Disabled for performance
         painter.setClipRect(event.rect())  # Only paint dirty region
         
-        # Calculate dimensions
-        rect = self.rect()
-        center_x = rect.width() / 2
-        
-        # Draw background
-        painter.setPen(Qt.NoPen)
-        painter.setBrush(QBrush(QColor(30, 30, 30)))
-        painter.drawRect(rect)
-        
-        # Draw battery icon
-        self._drawBatteryIcon(painter)
+        current_size = self.size()
+        if self._static_cache is None or self._cached_size != current_size:
+            self._rebuild_static_cache()
+            self._cached_size = current_size
+
+        if self._static_cache:
+            painter.drawPixmap(0, 0, self._static_cache)
+
+        self._drawBatteryFill(painter)
         self._drawBatteryPercentage(painter)
     
-    def _drawBatteryIcon(self, painter):
-        """Draw an enlarged battery icon that fills the available space."""
-        painter.save()
-        
-        # DISABLE antialiasing for faster rendering of dynamic fill
-        painter.setRenderHint(QPainter.Antialiasing, False)
-        
+    def _rebuild_static_cache(self):
+        width = self.width()
+        height = self.height()
+        if width <= 0 or height <= 0:
+            self._static_cache = None
+            return
+
+        pixmap = QPixmap(width, height)
+        pixmap.fill(QColor(30, 30, 30))
+
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+
         rect = self.rect()
-        # Make the battery much larger to fill the space previously used by both icon and bar
-        icon_width = rect.width() * 0.6  # Use 60% of widget width
-        icon_height = rect.height() * 0.5  # Use 50% of widget height
-        
-        # Center the battery icon
+        icon_width = rect.width() * 0.6
+        icon_height = rect.height() * 0.5
         icon_x = (rect.width() - icon_width) / 2
-        icon_y = rect.height() * 0.15  # Position it in upper portion, leaving space for percentage
-        
-        # Draw battery outline
-        painter.setPen(QPen(QColor(200, 200, 200), 3))  # Thicker outline for larger battery
-        painter.setBrush(Qt.NoBrush)
-        
-        # Main battery body
-        battery_rect = QRectF(icon_x, icon_y, icon_width, icon_height)
-        painter.drawRoundedRect(battery_rect, 6, 6)  # Larger corner radius
-        
-        # Battery terminal (top nub) - make it proportional
+        icon_y = rect.height() * 0.15
+
+        self._battery_rect = QRectF(icon_x, icon_y, icon_width, icon_height)
+
         terminal_width = icon_width * 0.3
         terminal_height = icon_height * 0.12
         terminal_x = icon_x + (icon_width - terminal_width) / 2
         terminal_y = icon_y - terminal_height
-        terminal_rect = QRectF(terminal_x, terminal_y, terminal_width, terminal_height)
-        painter.drawRoundedRect(terminal_rect, 2, 2)
-        
-        # Fill battery based on level
-        if self.battery_level > 0:
-            fill_height = battery_rect.height() * (self.battery_level / 100)
-            fill_y = battery_rect.bottom() - fill_height
-            
-            # Color based on battery level
-            if self.battery_level > 60:
-                fill_color = QColor(0, 255, 0)  # Green
-            elif self.battery_level > 30:
-                fill_color = QColor(255, 165, 0)  # Orange
-            else:
-                fill_color = QColor(255, 0, 0)  # Red
-            
-            painter.setBrush(QBrush(fill_color))
-            painter.setPen(Qt.NoPen)
-            
-            # Add some padding inside the battery outline
-            padding = 4
-            fill_rect = QRectF(
-                battery_rect.left() + padding, 
-                fill_y + padding,
-                battery_rect.width() - (padding * 2), 
-                fill_height - padding
-            )
+        self._terminal_rect = QRectF(terminal_x, terminal_y, terminal_width, terminal_height)
+
+        painter.setPen(QPen(QColor(200, 200, 200), 3))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawRoundedRect(self._battery_rect, 6, 6)
+        painter.drawRoundedRect(self._terminal_rect, 2, 2)
+
+        painter.end()
+        self._static_cache = pixmap
+
+    def _drawBatteryFill(self, painter):
+        if not self._battery_rect:
+            return
+
+        painter.save()
+        painter.setRenderHint(QPainter.Antialiasing, False)
+
+        if self.battery_level <= 0:
+            painter.restore()
+            return
+
+        battery_rect = self._battery_rect
+        fill_height = battery_rect.height() * (self.battery_level / 100)
+        fill_y = battery_rect.bottom() - fill_height
+
+        if self.battery_level > 60:
+            fill_color = QColor(0, 255, 0)
+        elif self.battery_level > 30:
+            fill_color = QColor(255, 165, 0)
+        else:
+            fill_color = QColor(255, 0, 0)
+
+        painter.setBrush(QBrush(fill_color))
+        painter.setPen(Qt.NoPen)
+
+        fill_rect = QRectF(
+            battery_rect.left() + self._padding,
+            fill_y + self._padding,
+            battery_rect.width() - (self._padding * 2),
+            fill_height - self._padding
+        )
+
+        if fill_rect.height() > 0:
             painter.drawRoundedRect(fill_rect, 4, 4)
-        
+
         painter.restore()
     
     def _drawBatteryPercentage(self, painter):

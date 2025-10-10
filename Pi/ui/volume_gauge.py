@@ -1,7 +1,6 @@
-import math
 from PySide6.QtWidgets import QWidget
 from PySide6.QtGui import (
-    QPainter, QPen, QBrush, QColor, QFont, QPainterPath
+    QPainter, QPen, QBrush, QColor, QFont, QPainterPath, QPixmap
 )
 from PySide6.QtCore import (
     Qt, QRect, QRectF
@@ -21,6 +20,11 @@ class VolumeGaugeWidget(QWidget):
         
         # Cache previous value to avoid unnecessary repaints
         self._prev_volume_level = -1
+        self._static_cache = None
+        self._cached_size = None
+        self._bar_rect = None
+        self._icon_rect = None
+        self._fill_padding = 2
     
     def setVolumeLevel(self, level):
         """Set the volume level (0-100)."""
@@ -34,6 +38,11 @@ class VolumeGaugeWidget(QWidget):
     def getVolumeLevel(self):
         """Get the current volume level."""
         return self.volume_level
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._static_cache = None
+        self._cached_size = None
     
     def paintEvent(self, event):
         """Render the volume gauge on screen."""
@@ -43,82 +52,95 @@ class VolumeGaugeWidget(QWidget):
         painter.setRenderHint(QPainter.TextAntialiasing, False)  # Disabled for performance
         painter.setClipRect(event.rect())  # Only paint dirty region
         
-        # Calculate dimensions
-        rect = self.rect()
-        center_x = rect.width() / 2
-        
-        # Draw background
-        painter.setPen(Qt.NoPen)
-        painter.setBrush(QBrush(QColor(30, 30, 30)))
-        painter.drawRect(rect)
-        
-        # Draw volume icon and level
-        self._drawVolumeIcon(painter)
+        current_size = self.size()
+        if self._static_cache is None or self._cached_size != current_size:
+            self._rebuild_static_cache()
+            self._cached_size = current_size
+
+        if self._static_cache:
+            painter.drawPixmap(0, 0, self._static_cache)
+
+        self._drawVolumeFill(painter)
         self._drawVolumePercentage(painter)
     
-    def _drawVolumeIcon(self, painter):
-        """Draw an enlarged volume icon that fills the available space."""
-        painter.save()
-        
-        # DISABLE antialiasing for faster rendering of dynamic fill bar
-        painter.setRenderHint(QPainter.Antialiasing, False)
-        
+    def _rebuild_static_cache(self):
+        width = self.width()
+        height = self.height()
+        if width <= 0 or height <= 0:
+            self._static_cache = None
+            return
+
+        pixmap = QPixmap(width, height)
+        pixmap.fill(QColor(30, 30, 30))
+
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+
         rect = self.rect()
         center_x = rect.width() / 2
-        
-        # Define icon area (upper portion of widget)
-        icon_height = rect.height() * 0.6  # 60% of widget height
-        icon_width = rect.width() * 0.8    # 80% of widget width
-        icon_rect = QRectF(
-            center_x - icon_width/2,
-            rect.height() * 0.1,  # Start 10% down from top
+        icon_height = rect.height() * 0.6
+        icon_width = rect.width() * 0.8
+        self._icon_rect = QRectF(
+            center_x - icon_width / 2,
+            rect.height() * 0.1,
             icon_width,
             icon_height
         )
-        
-        # Draw volume bar background
-        bar_rect = QRectF(
-            center_x - icon_width/4,
-            icon_rect.y() + icon_height * 0.2,
-            icon_width/2,
+
+        self._bar_rect = QRectF(
+            center_x - icon_width / 4,
+            self._icon_rect.y() + icon_height * 0.2,
+            icon_width / 2,
             icon_height * 0.6
         )
-        
-        # Draw volume bar outline
+
         painter.setPen(QPen(QColor(150, 150, 150), 3))
         painter.setBrush(Qt.NoBrush)
-        painter.drawRect(bar_rect)
-        
-        # Draw volume fill based on level
-        if self.volume_level > 0:
-            fill_height = (bar_rect.height() * self.volume_level / 100)
-            fill_rect = QRectF(
-                bar_rect.x() + 2,
-                bar_rect.y() + bar_rect.height() - fill_height - 2,
-                bar_rect.width() - 4,
-                fill_height
-            )
-            
-            # Color based on volume level
-            if self.volume_level >= 75:
-                fill_color = QColor(255, 100, 100)  # Red for high volume
-            elif self.volume_level >= 50:
-                fill_color = QColor(255, 165, 0)    # Orange for medium
-            elif self.volume_level >= 25:
-                fill_color = QColor(255, 255, 0)    # Yellow for low-medium
-            else:
-                fill_color = QColor(100, 255, 100)  # Green for low
-            
-            painter.setBrush(QBrush(fill_color))
-            painter.setPen(Qt.NoPen)
-            painter.drawRect(fill_rect)
-        
-        # Draw icon based on type
+        painter.drawRect(self._bar_rect)
+
         if self.icon_type == "speaker":
-            self._drawSpeakerIcon(painter, icon_rect)
+            self._drawSpeakerIcon(painter, self._icon_rect)
         elif self.icon_type == "engine":
-            self._drawEngineIcon(painter, icon_rect)
-        
+            self._drawEngineIcon(painter, self._icon_rect)
+
+        painter.end()
+        self._static_cache = pixmap
+
+    def _drawVolumeFill(self, painter):
+        if not self._bar_rect:
+            return
+
+        painter.save()
+        painter.setRenderHint(QPainter.Antialiasing, False)
+
+        if self.volume_level <= 0:
+            painter.restore()
+            return
+
+        bar_rect = self._bar_rect
+        fill_height = (bar_rect.height() * self.volume_level / 100)
+        fill_rect = QRectF(
+            bar_rect.x() + self._fill_padding,
+            bar_rect.y() + bar_rect.height() - fill_height - self._fill_padding,
+            bar_rect.width() - (self._fill_padding * 2),
+            fill_height
+        )
+
+        if self.volume_level >= 75:
+            fill_color = QColor(255, 100, 100)
+        elif self.volume_level >= 50:
+            fill_color = QColor(255, 165, 0)
+        elif self.volume_level >= 25:
+            fill_color = QColor(255, 255, 0)
+        else:
+            fill_color = QColor(100, 255, 100)
+
+        painter.setBrush(QBrush(fill_color))
+        painter.setPen(Qt.NoPen)
+
+        if fill_rect.height() > 0:
+            painter.drawRect(fill_rect)
+
         painter.restore()
     
     def _drawSpeakerIcon(self, painter, icon_rect):

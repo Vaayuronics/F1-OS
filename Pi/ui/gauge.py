@@ -1,10 +1,10 @@
 import math
 from PySide6.QtWidgets import QWidget
 from PySide6.QtGui import (
-    QPainter, QPen, QBrush, QColor
+    QPainter, QPen, QBrush, QColor, QPixmap, QConicalGradient
 )
 from PySide6.QtCore import (
-    Qt, QRect, QPoint, QRectF
+    Qt, QRect, QPoint, QRectF, QPointF
 )
 
 class GaugeWidget(QWidget):
@@ -32,8 +32,8 @@ class GaugeWidget(QWidget):
         self._prev_center_value = None
         
         # Pre-compute gauge geometry (will be calculated on first paint)
-        self._cached_geometry = None
-        self._cached_tick_positions = []
+        self._geom = None
+        self._static_cache = None
     
     def setValue(self, value):
         """Set the current value of the gauge."""
@@ -51,12 +51,14 @@ class GaugeWidget(QWidget):
     def setTitle(self, title):
         """Change the title of the gauge."""
         self.title = title
+        self._invalidate_static_cache()
         self.update()
     
     def setMaxValue(self, max_value):
         """Change the maximum value of the gauge."""
         self.max_value = max_value
         self.current_value = min(self.current_value, self.max_value)
+        self._invalidate_static_cache()
         self.update()
     
     def setThrottle(self, throttle):
@@ -89,120 +91,177 @@ class GaugeWidget(QWidget):
         self.custom_center_value = None
         self.update()
     
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._invalidate_static_cache()
+
+    def _invalidate_static_cache(self):
+        self._static_cache = None
+        self._geom = None
+
     def paintEvent(self, event):
         """Render the gauge on screen."""
         painter = QPainter(self)
-        # Use selective antialiasing - only where needed for smooth curves
-        # Text antialiasing is expensive, disable it for faster rendering
-        painter.setRenderHint(QPainter.Antialiasing, True)
-        painter.setRenderHint(QPainter.TextAntialiasing, False)  # Disabled for performance
-        
-        # Only paint the dirty region
         painter.setClipRect(event.rect())
-        
-        # Calculate the gauge dimensions
-        rect = self.rect()
-        center = rect.center()
-        
-        # Draw the gauge background
-        self._drawGaugeBackground(painter)
-        
-        # Draw the throttle arc before the main value arc (so it appears underneath)
+        if self._static_cache is None or self._static_cache.size() != self.size():
+            self._rebuild_static_cache()
+
+        if self._static_cache:
+            painter.drawPixmap(0, 0, self._static_cache)
+
+        if not self._geom:
+            return
+
+        # Dynamic overlays
         self._drawThrottleArc(painter)
-        
-        # Draw the value arc (RPM)
         self._drawValueArc(painter)
-        
-        # Draw the gauge details (ticks, numbers, needle)
-        self._drawGaugeDetails(painter)
+        self._drawCenterReadout(painter)
     
+    def _rebuild_static_cache(self):
+        width = self.width()
+        height = self.height()
+        if width <= 0 or height <= 0:
+            self._static_cache = None
+            self._geom = None
+            return
+
+        pixmap = QPixmap(width, height)
+        pixmap.fill(QColor(30, 30, 30))
+
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.Antialiasing, True)
+
+        rect = self.rect()
+        center_x = rect.width() / 2
+        center_y = rect.height() / 2
+        center_point = QPointF(center_x, center_y)
+        radius = min(center_x, center_y) - 10
+        base_size = min(rect.width(), rect.height()) * 0.9
+
+        start_angle = 225
+        span_angle = -270
+
+        value_arc_width = 10
+        value_arc_rect = QRectF(
+            center_x - radius + 15,
+            center_y - radius + 15,
+            (radius * 2) - 30,
+            (radius * 2) - 30,
+        )
+
+        throttle_inner_radius = base_size * 0.28
+        throttle_thickness = base_size * 0.04
+        throttle_rect = QRectF(
+            center_point.x() - throttle_inner_radius,
+            center_point.y() - throttle_inner_radius,
+            throttle_inner_radius * 2,
+            throttle_inner_radius * 2,
+        )
+
+        # Cache geometry for dynamic draws
+        self._geom = {
+            "center": center_point,
+            "size": base_size,
+            "start_angle": start_angle,
+            "span_angle": span_angle,
+            "value_arc_rect": value_arc_rect,
+            "value_arc_width": value_arc_width,
+            "throttle_rect": throttle_rect,
+            "throttle_thickness": throttle_thickness,
+            "throttle_inner_radius": throttle_inner_radius,
+        }
+
+        # Draw static throttle background arc
+        painter.setPen(QPen(QColor(40, 40, 40), throttle_thickness, Qt.SolidLine, Qt.RoundCap))
+        painter.drawArc(throttle_rect, start_angle * 16, span_angle * 16)
+
+        # Draw outer ring
+        painter.setPen(QPen(QColor(100, 100, 100), 2))
+        painter.setBrush(Qt.NoBrush)
+        painter.drawEllipse(QPoint(int(center_x), int(center_y)), int(radius), int(radius))
+
+        # Draw title text once (static)
+        painter.setPen(QColor(200, 200, 200))
+        title_font = painter.font()
+        title_font.setPointSize(8)
+        painter.setFont(title_font)
+        painter.drawText(QRect(0, int(center_y + radius / 2), width, 30), Qt.AlignCenter, self.title)
+
+        # Draw background value arc
+        painter.setPen(QPen(QColor(60, 60, 60), value_arc_width, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        painter.drawArc(value_arc_rect, start_angle * 16, span_angle * 16)
+
+        # Draw tick marks and labels
+        painter.setPen(QPen(QColor(200, 200, 200), 1))
+        tick_font = painter.font()
+        tick_font.setPointSize(12)
+        tick_font.setBold(True)
+        painter.setFont(tick_font)
+
+        for i in range(11):
+            angle = math.radians(225 - i * 27)
+            inner_x = center_x + (radius - 20) * math.cos(angle)
+            inner_y = center_y - (radius - 20) * math.sin(angle)
+            outer_x = center_x + (radius - 10) * math.cos(angle)
+            outer_y = center_y - (radius - 10) * math.sin(angle)
+            painter.drawLine(int(inner_x), int(inner_y), int(outer_x), int(outer_y))
+
+            if i % 2 == 0:
+                text_x = center_x + (radius - 35) * math.cos(angle)
+                text_y = center_y - (radius - 35) * math.sin(angle)
+                tick_value = int(i * self.max_value / 10)
+
+                if self.max_value == 14000:
+                    tick_label = f"{tick_value // 1000}"
+                elif self.max_value >= 1000:
+                    if tick_value >= 1000 and tick_value % 1000 == 0:
+                        tick_label = f"{tick_value // 1000}k"
+                    else:
+                        tick_label = f"{tick_value}"
+                else:
+                    tick_label = f"{tick_value}"
+
+                rect_label = QRect(int(text_x) - 30, int(text_y) - 15, 60, 30)
+                painter.drawText(rect_label, Qt.AlignCenter, tick_label)
+
+        painter.end()
+        self._static_cache = pixmap
+
     def _drawThrottleArc(self, painter):
         """Draw a throttle arc beneath the RPM arc as a curved bar with gradient colors"""
         painter.save()
-        
-        # DISABLE antialiasing for this dynamic element (performance optimization)
         painter.setRenderHint(QPainter.Antialiasing, False)
-        
-        # Calculate dimensions
-        rect = self.rect()
-        center = rect.center()
-        size = min(rect.width(), rect.height()) * 0.9  # 90% of gauge size
-        
-        # Define the inner arc for throttle (smaller than the RPM arc)
-        inner_radius = size * 0.28  # Reduced from 0.32 to 0.28 for more separation from tick numbers
-        arc_thickness = size * 0.04  # Thickness of the arc line
-        
-        # Set angles to match RPM gauge
-        start_angle = 225   # Start at left side (225 degrees)
-        span_angle = -270   # -270 degrees total arc (clockwise direction)
 
-        # The throttle value determines how much of the arc to draw
-        throttle_span = span_angle * self.throttle
-        
-        # Create a pen for drawing the arc lines
-        background_pen = QPen(QColor(40, 40, 40), arc_thickness, Qt.SolidLine, Qt.RoundCap)
-        painter.setPen(background_pen)
-        
-        # Draw the background arc
-        painter.drawArc(
-            center.x() - inner_radius, 
-            center.y() - inner_radius,
-            inner_radius * 2, 
-            inner_radius * 2,
-            start_angle * 16,  # QPainter uses 16th of a degree
-            span_angle * 16
-        )
-        
-        # Draw the colored throttle arc if throttle is greater than 0
+        geom = self._geom
+        start_angle = geom["start_angle"]
+        span_angle = geom["span_angle"]
+
+        arc_rect = geom["throttle_rect"]
+        arc_thickness = geom["throttle_thickness"]
+
+        # Draw the background arc (already cached visually but re-draw to ensure
+        # the visible area stays fresh when using partial updates)
+        painter.setPen(QPen(QColor(40, 40, 40), arc_thickness, Qt.SolidLine, Qt.RoundCap))
+        painter.drawArc(arc_rect, start_angle * 16, span_angle * 16)
+
         if self.throttle > 0:
-            # Calculate how many degrees to fill based on throttle
-            filled_angle = 270 * self.throttle  # How many degrees to fill
-            
-            # Draw each segment with appropriate color
-            for i in range(int(filled_angle)):
-                # Calculate position in gradient (0.0 to 1.0)
-                position = i / 270.0  # Position in the full range
-                
-                # Fixed: Calculate angle for this segment - starting at exactly the same point
-                # as the background arc, and moving clockwise
-                segment_angle = start_angle * 16  # Start at the same point as background
-                segment_offset = i * 16           # Offset by i degrees (in 1/16ths)
-                
-                # Create gradient color (green -> orange -> red)
-                if position < 0.5:
-                    # Green to orange (0.0 to 0.5)
-                    ratio = position * 2  # 0.0 to 1.0
-                    r = int(0 + (255 * ratio))      # 0 to 255
-                    g = int(255)                    # Stay at 255
-                    b = int(0)                      # Stay at 0
-                else:
-                    # Orange to red (0.5 to 1.0)
-                    ratio = (position - 0.5) * 2    # 0.0 to 1.0
-                    r = int(255)                    # Stay at 255
-                    g = int(255 - (255 * ratio))    # 255 to 0
-                    b = int(0)                      # Stay at 0
-                
-                color = QColor(r, g, b)
-                gradient_pen = QPen(color, arc_thickness, Qt.SolidLine, Qt.RoundCap)
-                painter.setPen(gradient_pen)
-                
-                # Draw a 1-degree segment with this color
-                painter.drawArc(
-                    center.x() - inner_radius, 
-                    center.y() - inner_radius,
-                    inner_radius * 2, 
-                    inner_radius * 2,
-                    segment_angle - segment_offset,  # Move clockwise from start angle
-                    -1 * 16  # Draw 1 degree clockwise
-                )
-        
-        # Add small "TH" label at a position that won't overlap with RPM
+            gradient = QConicalGradient(geom["center"], start_angle - 90)
+            gradient.setColorAt(0.0, QColor(0, 255, 0))
+            gradient.setColorAt(0.5, QColor(255, 165, 0))
+            gradient.setColorAt(1.0, QColor(255, 0, 0))
+            painter.setPen(QPen(QBrush(gradient), arc_thickness, Qt.SolidLine, Qt.RoundCap))
+            painter.drawArc(
+                arc_rect,
+                start_angle * 16,
+                int(span_angle * 16 * self.throttle)
+            )
+
+        center = geom["center"]
+        inner_radius = geom["throttle_inner_radius"]
+
         painter.setPen(Qt.white)
         font = painter.font()
-        
-        # Calculate font size dynamically based on gauge dimensions
-        # Use a scaling factor of 3% of the gauge size for the font
-        dynamic_font_size = max(12, int(size * 0.05))
+        dynamic_font_size = max(12, int(geom["size"] * 0.05))
         font.setPointSize(dynamic_font_size)
         painter.setFont(font)
         
@@ -215,16 +274,16 @@ class GaugeWidget(QWidget):
         # Draw label text (smaller, above) - lowered position
         label_rect = QRectF(
             center.x() - inner_radius,
-            center.y() + size * 0.08,  # Lowered from 0.02 to 0.08
+            center.y() + geom["size"] * 0.08,
             inner_radius * 2,
-            inner_radius * 0.2  # Smaller height for label
+            inner_radius * 0.2
         )
         painter.drawText(label_rect, Qt.AlignCenter, label_text)
         
         # Draw value text (below the label) - lowered position
         value_rect = QRectF(
             center.x() - inner_radius,
-            center.y() + size * 0.14,  # Lowered from 0.08 to 0.14
+            center.y() + geom["size"] * 0.14,
             inner_radius * 2,
             inner_radius * 0.2  # Smaller height for value
         )
@@ -232,155 +291,72 @@ class GaugeWidget(QWidget):
         
         painter.restore()
     
-    def _drawGaugeBackground(self, painter):
-        """Draw the background of the gauge."""
-        painter.setPen(Qt.NoPen)
-        painter.setBrush(QBrush(QColor(30, 30, 30)))
-        painter.drawRect(0, 0, self.width(), self.height())
-    
     def _drawValueArc(self, painter):
         """Draw the value arc (RPM) on the gauge."""
-        # DISABLE antialiasing for this dynamic element (performance optimization)
         painter.setRenderHint(QPainter.Antialiasing, False)
-        
-        center_x = self.width() / 2
-        center_y = self.height() / 2
-        radius = min(center_x, center_y) - 10
-        
-        # Draw outer ring
-        painter.setPen(QPen(QColor(100, 100, 100), 2))
-        painter.setBrush(Qt.NoBrush)
-        painter.drawEllipse(QPoint(int(center_x), int(center_y)), int(radius), int(radius))
-        
-        # Draw gauge title (reduced by half)
-        painter.setPen(QColor(200, 200, 200))
-        title_font = painter.font()
-        title_font.setPointSize(8)  # Reduced from 16 to 8 (half)
-        painter.setFont(title_font)
-        painter.drawText(QRect(0, int(center_y + radius/2), self.width(), 30), 
-                        Qt.AlignCenter, self.title)
-        
-        # Draw value (main number) - MUCH BIGGER
-        painter.setPen(QColor(255, 255, 255))
-        value_font = painter.font()
-        value_font.setPointSize(48)  # Even larger for main value
-        value_font.setBold(True)     # Make it bold for better visibility
-        painter.setFont(value_font)
-        
-        # Show custom center value if set, otherwise show the gauge value
-        if self.custom_center_value is not None:
-            center_text = str(self.custom_center_value)
-            # Move center number up to avoid overlap with TH/ENG TUN labels
-            painter.drawText(QRect(0, int(center_y - 50), self.width(), 70), 
-                            Qt.AlignCenter, center_text)
-        else:
-            # Special stacked display for RPM gauge (only when title contains "RPM")
-            if "RPM" in self.title.upper():
-                rpm_value = int(self.current_value)
-                
-                # For values >= 1000, show top digits above bottom 3 digits
-                if rpm_value >= 1000:
-                    rpm_str = str(rpm_value)  # No padding, use actual digits
-                    # Split: everything except last 3 digits on top, last 3 on bottom
-                    top_digits = rpm_str[:-3]  # All but last 3
-                    bottom_digits = rpm_str[-3:]  # Last 3 digits
-                    
-                    # Draw top digits (larger font, centered)
-                    top_font = painter.font()
-                    top_font.setPointSize(32) 
-                    painter.setFont(top_font)
-                    painter.drawText(QRect(0, int(center_y - 52), self.width(), 35), 
-                                    Qt.AlignCenter, top_digits)
-                    
-                    # Draw bottom digits (smaller font)
-                    bottom_font = painter.font()
-                    bottom_font.setPointSize(24)
-                    painter.setFont(bottom_font)
-                    painter.drawText(QRect(0, int(center_y - 22), self.width(), 35), 
-                                    Qt.AlignCenter, bottom_digits)
-                else:
-                    # For values < 1000, show normally without leading zeros
-                    center_text = str(rpm_value)  # No leading zeros
-                    # Use smaller font (40pt instead of 48pt) for 3-digit numbers
-                    small_font = painter.font()
-                    small_font.setPointSize(40)  # 8pt smaller than the standard 48pt
-                    painter.setFont(small_font)
-                    painter.drawText(QRect(0, int(center_y - 50), self.width(), 70), 
-                                    Qt.AlignCenter, center_text)
-            else:
-                # Normal display for non-RPM gauges
-                center_text = f"{int(self.current_value)}"
-                painter.drawText(QRect(0, int(center_y - 50), self.width(), 70), 
-                                Qt.AlignCenter, center_text)
-        
-        # Reset font for tick marks (reduced by half)
-        tick_font = painter.font()
-        tick_font.setPointSize(12)  # Reduced from 24 to 12 (half)
-        tick_font.setBold(True)     # Keep bold for visibility
-        painter.setFont(tick_font)
-        
-        # Draw gauge arc
-        start_angle = 225 * 16  # 225 degrees in QPainter's 1/16th degree system
-        span_angle = -270 * 16  # -270 degrees in QPainter's system (clockwise)
-        
+
         progress = self.current_value / self.max_value if self.max_value > 0 else 0
-        current_span = span_angle * progress
-        
-        # Background arc
-        painter.setPen(QPen(QColor(60, 60, 60), 10, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
-        painter.drawArc(int(center_x - radius + 15), int(center_y - radius + 15), 
-                      int(radius * 2 - 30), int(radius * 2 - 30), start_angle, span_angle)
-        
-        # Foreground arc with color based on value
+        progress = max(0.0, min(1.0, progress))
+
+        geom = self._geom
+        if progress <= 0:
+            return
+
         if progress < 0.7:
-            gradient_color = QColor(0, 255, 0)  # Green
+            gradient_color = QColor(0, 255, 0)
         elif progress < 0.9:
-            gradient_color = QColor(255, 165, 0)  # Orange
+            gradient_color = QColor(255, 165, 0)
         else:
-            gradient_color = QColor(255, 0, 0)  # Red
-            
-        painter.setPen(QPen(gradient_color, 10, Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
-        painter.drawArc(int(center_x - radius + 15), int(center_y - radius + 15), 
-                      int(radius * 2 - 30), int(radius * 2 - 30), start_angle, int(current_span))
+            gradient_color = QColor(255, 0, 0)
+
+        painter.setPen(QPen(gradient_color, geom["value_arc_width"], Qt.SolidLine, Qt.RoundCap, Qt.RoundJoin))
+        painter.drawArc(
+            geom["value_arc_rect"],
+            int(geom["start_angle"] * 16),
+            int(geom["span_angle"] * 16 * progress)
+        )
+
+    def _drawCenterReadout(self, painter):
+        geom = self._geom
+        center = geom["center"]
+        painter.setPen(QColor(255, 255, 255))
+
+        if self.custom_center_value is not None:
+            value_font = painter.font()
+            value_font.setPointSize(48)
+            value_font.setBold(True)
+            painter.setFont(value_font)
+            painter.drawText(QRect(0, int(center.y() - 50), self.width(), 70), Qt.AlignCenter, str(self.custom_center_value))
+            return
+
+        if "RPM" in self.title.upper():
+            rpm_value = int(self.current_value)
+            if rpm_value >= 1000:
+                rpm_str = str(rpm_value)
+                top_digits = rpm_str[:-3]
+                bottom_digits = rpm_str[-3:]
+
+                top_font = painter.font()
+                top_font.setPointSize(32)
+                top_font.setBold(True)
+                painter.setFont(top_font)
+                painter.drawText(QRect(0, int(center.y() - 52), self.width(), 35), Qt.AlignCenter, top_digits)
+
+                bottom_font = painter.font()
+                bottom_font.setPointSize(24)
+                bottom_font.setBold(True)
+                painter.setFont(bottom_font)
+                painter.drawText(QRect(0, int(center.y() - 22), self.width(), 35), Qt.AlignCenter, bottom_digits)
+            else:
+                small_font = painter.font()
+                small_font.setPointSize(40)
+                small_font.setBold(True)
+                painter.setFont(small_font)
+                painter.drawText(QRect(0, int(center.y() - 50), self.width(), 70), Qt.AlignCenter, str(rpm_value))
+        else:
+            value_font = painter.font()
+            value_font.setPointSize(48)
+            value_font.setBold(True)
+            painter.setFont(value_font)
+            painter.drawText(QRect(0, int(center.y() - 50), self.width(), 70), Qt.AlignCenter, f"{int(self.current_value)}")
     
-    def _drawGaugeDetails(self, painter):
-        """Draw the details of the gauge (ticks, numbers, needle)."""
-        center_x = self.width() / 2
-        center_y = self.height() / 2
-        radius = min(center_x, center_y) - 10
-        
-        # Draw tick marks
-        painter.setPen(QPen(QColor(200, 200, 200), 1))
-        for i in range(11):
-            angle = math.radians(225 - i * 27)  # 270 degrees / 10 = 27 degrees per tick
-            inner_x = center_x + (radius - 20) * math.cos(angle)
-            inner_y = center_y - (radius - 20) * math.sin(angle)
-            outer_x = center_x + (radius - 10) * math.cos(angle)
-            outer_y = center_y - (radius - 10) * math.sin(angle)
-            
-            painter.drawLine(int(inner_x), int(inner_y), int(outer_x), int(outer_y))
-            
-            # Draw tick labels every other tick
-            if i % 2 == 0:
-                # Adjust text position for smaller font - move closer to tick marks
-                text_x = center_x + (radius - 35) * math.cos(angle)  # Reduced from 50 to 35
-                text_y = center_y - (radius - 35) * math.sin(angle)
-                
-                tick_value = int(i * self.max_value / 10)
-                
-                # Special handling for RPM gauge (14000 max) to show clean numbers
-                if self.max_value == 14000:
-                    # For 14k RPM: show 0, 2, 4, 6, 8, 10, 12, 14 (representing thousands)
-                    tick_label = f"{tick_value // 1000}"
-                elif self.max_value >= 1000:
-                    # For other large values, use the original logic but with cleaner formatting
-                    if tick_value >= 1000 and tick_value % 1000 == 0:
-                        tick_label = f"{tick_value // 1000}k"
-                    else:
-                        tick_label = f"{tick_value}"
-                else:
-                    tick_label = f"{tick_value}"
-                
-                # Smaller rectangle for smaller font
-                rect = QRect(int(text_x) - 30, int(text_y) - 15, 60, 30)  # Reduced from 100x50 to 60x30
-                painter.drawText(rect, Qt.AlignCenter, tick_label)
