@@ -245,18 +245,16 @@ class GaugeWidget(QWidget):
         painter.drawArc(arc_rect, start_angle * 16, span_angle * 16)
 
         if self.throttle > 0:
-            # Our arc sweeps 270° out of 360°, so we need to map our gradient stops
-            # to the portion of the full circle that our arc occupies
-            # The arc goes from 225° counterclockwise by 270°
+            # Our arc sweeps 270° counter-clockwise, but QConicalGradient applies colors clockwise
+            # So we need to reverse the color order and map to our 270° arc (0.75 of full circle)
             gradient = QConicalGradient(geom["center"], start_angle)
             
-            # Map our 0-100% throttle to the 270° arc (which is 0.75 of full circle)
-            # We want: Green -> Yellow -> Orange -> Red across the 270° sweep
-            gradient.setColorAt(0.0, QColor(0, 255, 0))        # Green at start (0%)
+            # Reversed color order for counter-clockwise arc: Red -> Orange -> Yellow -> Green
+            gradient.setColorAt(0.0, QColor(255, 0, 0))        # Red at start (will be at end of arc)
+            gradient.setColorAt(0.1875, QColor(255, 165, 0))   # Orange at 25% of arc (0.25 * 0.75)
             gradient.setColorAt(0.375, QColor(255, 255, 0))    # Yellow at 50% of arc (0.5 * 0.75)
-            gradient.setColorAt(0.5625, QColor(255, 165, 0))   # Orange at 75% of arc (0.75 * 0.75)
-            gradient.setColorAt(0.75, QColor(255, 0, 0))       # Red at end (100% of arc)
-            gradient.setColorAt(1.0, QColor(255, 0, 0))        # Keep red for remaining circle
+            gradient.setColorAt(0.75, QColor(0, 255, 0))       # Green at end (will be at start of arc)
+            gradient.setColorAt(1.0, QColor(0, 255, 0))        # Keep green for remaining circle
             
             painter.setPen(QPen(QBrush(gradient), arc_thickness, Qt.SolidLine, Qt.RoundCap))
             painter.drawArc(
