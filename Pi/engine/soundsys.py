@@ -39,7 +39,6 @@ porcheMode = False
 loaded = False
 
 def test_latency():
-    '''NOTE: Initial stretch for librosa module as a whole will take a long time. Use librosa to play the startup audio at like 1.01 times speed or something to initialize JIT.'''
     audio_data, channels = EngineAudioPlayer.load_audio_wav("audio/accel.wav")
     print(f"Loaded audio: shape={audio_data.shape}, channels={channels}")
     dur = EngineAudioPlayer.get_dur(audio_data)/5
@@ -126,8 +125,15 @@ def play_horn():
         raise Exception("Audio tracks not loaded yet!")
     engineer.play_chunk(horn)
 
-def play_engine(accel: bool, speed: float, engine_vol: int = 100):
-    '''Play engine sound based on acceleration and speed.'''
+def play_engine(accel, play_speed: float, engine_vol: int, idle: bool):
+    '''Play engine sound based on acceleration state, play_speed, and idle flag.
+    
+    Args:
+        accel: True (accelerating), False (decelerating), or None (no significant change - loop)
+        play_speed: Play speed multiplier
+        engine_vol: Engine volume (0-100)
+        idle: True when RPM <= 2000 (forces idle sound)
+    '''
     global loaded
     if not loaded:
         raise Exception("Audio tracks not loaded yet!")
@@ -135,7 +141,7 @@ def play_engine(accel: bool, speed: float, engine_vol: int = 100):
     if porcheMode:
         pass #TODO: Implement porche audio logic
     else:
-        play_f1_audio(accel, speed)
+        play_f1_audio(accel, play_speed, idle)
 
 def change_track(new_track: int):
     '''Change the current music track.'''
@@ -163,38 +169,85 @@ def play_music(music_vol: int = 100):
     musicer.play_chunk(chunk)
     curmusictime += musicer.get_chunk_duration()
 
-def play_f1_audio(accel: bool, speed: float):
-    '''Play F1 engine sound based on acceleration and speed.'''
+def play_f1_audio(accel, play_speed: float, idle: bool):
+    '''Play F1 engine sound based on acceleration state, play_speed, and idle flag.
+    
+    Args:
+        accel: True (accelerating), False (decelerating), or None (no significant change - loop)
+        play_speed: Play speed multiplier
+        idle: True when RPM <= 2000 (forces idle sound)
+    '''
     global curtime, maxed, idled, loaded
     if not loaded:
         raise Exception("Audio tracks not loaded yet!")
-    #NOTE: May need to set speed to 0 when idling or maxed to prevent weird speedups
+    
     data = None
-    if accel and maxed:
-        data = f1_v10['max_rpm']
-    elif not accel and idled:
+    actual_speed = play_speed
+    
+    # Force idle state if RPM <= 2000
+    if idle:
         data = f1_v10['idle']
+        idled = True
+        maxed = False
+        actual_speed = 1.0  # Play idle at normal speed
+    elif accel is None:
+        # No significant RPM change (within ±300) - loop current/previous chunk
+        # Keep current state (maxed/idled) and replay from previous position
+        if idled:
+            data = f1_v10['idle']
+            actual_speed = 1.0
+        elif maxed:
+            data = f1_v10['max_rpm']
+            actual_speed = 1.0
+        else:
+            # In transition - use accel sound at previous position
+            data = f1_v10['accel']
+            actual_speed = play_speed
+    elif accel and maxed:
+        # Already at max RPM and still accelerating
+        data = f1_v10['max_rpm']
+        actual_speed = 1.0
     elif accel and not maxed:
+        # Accelerating
         data = f1_v10['accel']
-        idled = False # Reset idled when accelerating
+        idled = False  # Reset idled when accelerating
+        actual_speed = play_speed
+    elif not accel and idled:
+        # Already idling and still decelerating
+        data = f1_v10['idle']
+        actual_speed = 1.0
     elif not accel and not idled:
+        # Decelerating
         data = f1_v10['decel']
-        maxed = False # Reset maxed when decelerating
-    data = EngineAudioPlayer.transform_audio(data, curtime, engineer.get_chunk_duration(), speed)
-    if data is None:
-        if accel and not maxed:
+        maxed = False  # Reset maxed when decelerating
+        actual_speed = play_speed
+    
+    # Transform audio chunk
+    chunk_data = EngineAudioPlayer.transform_audio(data, curtime, engineer.get_chunk_duration(), actual_speed)
+    
+    if chunk_data is None:
+        # Reached end of current audio track - transition to next state
+        if accel and not maxed and not idle:
+            # Finished accel sound, move to max RPM
             maxed = True
             curtime = 0.0
-            play_f1_audio(accel, speed) # Recursively call to play max rpm sound
+            play_f1_audio(accel, play_speed, idle)  # Recursively call to play max rpm sound
             return
-        elif not accel and not idled:
+        elif not accel and not idled and idle:
+            # Finished decel sound, move to idle
             idled = True
             curtime = 0.0
-            play_f1_audio(accel, speed) # Recursively call to play idle sound
+            play_f1_audio(accel, play_speed, idle)  # Recursively call to play idle sound
             return
         else:
+            # Loop current track from beginning
             curtime = 0.0
-            play_f1_audio(accel, speed) # Recursively call to loop current track
+            play_f1_audio(accel, play_speed, idle)  # Recursively call to loop current track
             return
-    curtime += engineer.get_chunk_duration() * speed
-    engineer.play_chunk(data)
+    
+    # Update time position for next chunk (only if accel is not None)
+    if accel is not None:
+        curtime += engineer.get_chunk_duration() * actual_speed
+    # If accel is None, keep curtime the same to loop the same chunk region
+    
+    engineer.play_chunk(chunk_data)

@@ -46,6 +46,7 @@ ui_data_dict = None  # Will be initialized in main as Manager().dict()
 hardware_data_dict = None
 sound_data_dict = None
 
+#TODO: Clean up old data from persistent state
 # Persistent state dictionary with lock
 persistent_state = {
     'Shift Emulation': False,
@@ -59,8 +60,8 @@ persistent_state = {
     'Porche': False,
     'Pause': False,
     'Lights': 'Off',
-    'Prev Speed': 0,  # Needed to calculate acceleration
     'Prev Time': 0,   # Needed to calculate rate of change
+    'Prev RPM': 0,    # Needed to detect RPM changes for acceleration
 }
 persistent_state_lock = None  # Will be initialized as multiprocessing.Lock()
 
@@ -180,8 +181,6 @@ def hardware_loop(interrupted_event):
     
     print("[hardware_loop] Thread exiting")
 
-#TODO: still need to fix some issues with the audio popping, 
-#And the 0 rpm logic still accelerating.
 def audio_loop(interrupted_event):
     '''Play the sounds chunks and return - runs in separate thread within audio process'''
     global sound_data_dict
@@ -214,9 +213,15 @@ def audio_loop(interrupted_event):
                     #sound.play_music(data.get('Music Volume', 0))
                     pass
                 
-                sound.play_engine(data.get('Accel', False), data.get('Play Speed', 0), data.get('Engine Volume', 0))
+                # Pass accel state (True/False/None), play speed, idle flag, and volume
+                sound.play_engine(
+                    data.get('Accel', False), 
+                    data.get('Play Speed', 1.0),
+                    data.get('Engine Volume', 0),
+                    data.get('Idle', False)
+                )
             
-            time.sleep(0.05)  # 20Hz update rate
+            time.sleep(0.03)
             
         except Exception as e:
             print(f"[audio_loop] Error: {e}")
@@ -225,29 +230,40 @@ def audio_loop(interrupted_event):
     
     print("[audio_loop] Thread exiting")
 
-def calc_speed_rpm(throttle: float, speed: float, gear: int, prev_speed: float = 0, prev_time: float = 0, engine_speed : float = 0, motor_rpm: int = 0) -> tuple[bool, float, float]:
-    '''Simple RPM calculation based on throttle (in degrees 0-135) and speed.'''
+def calc_speed_rpm(throttle: float, speed: float, gear: int, prev_rpm: float = 0, prev_time: float = 0, motor_rpm: int = 0) -> tuple[bool, bool, float, float]:
+    '''Simple RPM calculation based on throttle (in degrees 0-135) and speed.
+    Acceleration is detected when RPM increases by at least 300 RPM.
+    Idle is True when RPM <= 2000 (forces idle sound regardless of accel state).
+    '''
     accel = False
     play_speed = 1.0
     rpm = 0.0
+    idle = False
 
-    rate = 0
-    if prev_time > 0 and (time.time() - prev_time) > 0:
-        rate = (speed - prev_speed) / (time.time() - prev_time)
+    #TODO: Finish calculations when real speed sensor is available
 
-    #TODO: Finish calculations
-
+    # For now, RPM is proportional to throttle for testing
     if gear == 0:
         rpm = throttle * 103.7
     else:
         # Add proper gear-based RPM calculation here
         rpm = (speed * 60 * gear * 10) + (throttle * 50)
 
-    #TODO: change back to speed
-    if rpm >= (prev_speed - 500) :
-        accel = True
+    # Check if we're at idle RPM (force idle sound)
+    if rpm <= 2000:
+        idle = True
+    
+    # Detect acceleration: RPM must change by at least 300 to be significant
+    rpm_change = rpm - prev_rpm
+    if rpm_change >= 300:
+        accel = True  # Accelerating
+    elif rpm_change <= -300:
+        accel = False  # Decelerating
+    else:
+        # No significant change - loop the current/previous chunks
+        accel = None  # None indicates no significant change (loop current position)
 
-    return accel, play_speed, rpm
+    return accel, idle, play_speed, rpm
 
 def process_data(pico_data, arduino_data):
     """Combine and process data from pico and arduino.\n
@@ -262,8 +278,8 @@ def process_data(pico_data, arduino_data):
     
     # Get persistent state once with lock
     with persistent_state_lock:
-        prev_speed = persistent_state['Prev Speed']
         prev_time = persistent_state['Prev Time']
+        prev_rpm = persistent_state['Prev RPM']
         shift_emulation = persistent_state['Shift Emulation']
         headlights = persistent_state['Headlights']
         hazards = persistent_state['Hazards']
@@ -445,16 +461,17 @@ def process_data(pico_data, arduino_data):
     # Process arduino data
     if arduino_data:
         if 'Throttle' in arduino_data and 'Speed' in arduino_data and 'Brake' in arduino_data:
-            #TODO: Change back to speed from rpm for debug
-            accel, play_speed, rpm = calc_speed_rpm(
+            accel, idle, play_speed, rpm = calc_speed_rpm(
                 arduino_data.get('Throttle', 0),  # Pass raw degrees
                 arduino_data.get('Speed', 0),
                 cur_gear,
-                prev_speed,
+                prev_rpm,
                 prev_time
             )
+            # accel can be True (accelerating), False (decelerating), or None (no significant change/loop)
             new_sound_data['Accel'] = accel
             new_sound_data['Play Speed'] = play_speed
+            new_sound_data['Idle'] = idle  # Force idle sound when RPM <= 2000
             new_ui_data['RPM'] = rpm
             new_ui_data['Speed'] = arduino_data['Speed']
             new_ui_data['Throttle'] = arduino_data['Throttle'] / MAX_THROTTLE_DEG  # Convert to 0-1 for UI
@@ -464,7 +481,7 @@ def process_data(pico_data, arduino_data):
             
             # Update persistent state
             with persistent_state_lock:
-                persistent_state['Prev Speed'] = rpm #arduino_data.get('Speed', 0)
+                persistent_state['Prev RPM'] = rpm
                 persistent_state['Prev Time'] = time.time()
     
     # Update shared dicts atomically (always latest data, no queueing)

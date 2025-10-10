@@ -1,187 +1,19 @@
 from PySide6.QtWidgets import (QMainWindow, QFrame, QSplitter, 
                               QSizePolicy, QWidget, QVBoxLayout, QLabel, QHBoxLayout, QApplication, QScrollArea)
-from PySide6.QtCore import Qt, QSettings, QSize, Signal, QTimer
+from PySide6.QtCore import Qt, QSettings, QSize, QTimer
 from PySide6.QtGui import QFont, QSurfaceFormat
 from ui.gauge import GaugeWidget
 from ui.car2d import Car2DWidget
 from ui.battery_gauge import BatteryGaugeWidget
 from ui.volume_gauge import VolumeGaugeWidget
 import sys
+import time
 
 MAX_RPM = 14000 # Max RPM for the gauge, actual should go to about 14.5k
 UPDATE_MS = 50  # Update interval in milliseconds (20Hz - reduced from 30Hz to lower CPU usage on Pi)
 
-class NotificationFrame(QWidget):
-    """Individual notification frame that auto-destroys after duration."""
-    
-    # Signal emitted when notification is about to be destroyed
-    notification_closed = Signal(object)
-    
-    def __init__(self, title, subtitle="", duration_ms=2000, 
-                 background_color="#2D2D2D", title_color="white", 
-                 subtitle_color="#CCCCCC", parent=None):
-        super().__init__(parent)
-        # Remove Qt.Tool flag - makes it a child overlay instead of separate window
-        self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint)
-        self.setAttribute(Qt.WA_TranslucentBackground)
-        self.setFixedSize(400, 120)  # Smaller height for notification
-        
-        # Create main layout
-        layout = QVBoxLayout(self)
-        layout.setContentsMargins(5, 5, 5, 5)
-        layout.setSpacing(10)
-        layout.setAlignment(Qt.AlignCenter)
-        
-        # Create container frame for styling
-        self.container = QFrame()
-        self.container.setStyleSheet(f"""
-            QFrame {{
-                background-color: {background_color};
-                border: 2px solid #555555;
-                border-radius: 15px;
-            }}
-        """)
-        
-        # Container layout
-        container_layout = QVBoxLayout(self.container)
-        container_layout.setContentsMargins(8, 8, 8, 8)
-        container_layout.setSpacing(10)
-        container_layout.setAlignment(Qt.AlignCenter)
-        
-        # Title label (large font)
-        self.title_label = QLabel(title)
-        self.title_label.setAlignment(Qt.AlignCenter)
-        self.title_label.setWordWrap(True)
-        title_font = QFont()
-        title_font.setPointSize(16)
-        title_font.setBold(True)
-        self.title_label.setFont(title_font)
-        self.title_label.setStyleSheet(f"color: {title_color}; background-color: transparent;")
-        
-        # Subtitle label (smaller font)
-        self.subtitle_label = QLabel(subtitle)
-        self.subtitle_label.setAlignment(Qt.AlignCenter)
-        self.subtitle_label.setWordWrap(True)
-        subtitle_font = QFont()
-        subtitle_font.setPointSize(10)
-        self.subtitle_label.setFont(subtitle_font)
-        self.subtitle_label.setStyleSheet(f"color: {subtitle_color}; background-color: transparent;")
-        
-        # Hide subtitle if empty
-        if not subtitle:
-            self.subtitle_label.hide()
-        
-        # Add labels to container
-        container_layout.addWidget(self.title_label)
-        container_layout.addWidget(self.subtitle_label)
-        
-        # Add container to main layout
-        layout.addWidget(self.container)
-        
-        # Timer for auto-destroy
-        self.destroy_timer = QTimer()
-        self.destroy_timer.setSingleShot(True)
-        self.destroy_timer.timeout.connect(self._on_destroy_timeout)
-        self.destroy_timer.start(duration_ms)
-        
-        print(f"[Notification] Created: '{title}' - '{subtitle}' for {duration_ms}ms")
-        
-        # Don't show yet - let the manager position us first
-    
-    def _on_destroy_timeout(self):
-        """Called when the destroy timer expires."""
-        self.notification_closed.emit(self)
-        self.deleteLater()
-
-class NotificationManager(QWidget):
-    """Manages multiple stacked notification frames."""
-    
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        # Manager is invisible overlay on parent - just tracks notifications
-        self.setAttribute(Qt.WA_TransparentForMouseEvents)  # Don't block clicks
-        self.setAttribute(Qt.WA_TranslucentBackground)
-        # No special window flags - this stays as part of parent window
-        
-        # Track active notifications (oldest first)
-        self.active_notifications = []
-        
-        # Spacing between notifications
-        self.notification_spacing = 10
-        
-        # Position from top of parent
-        self.top_margin = 20
-    
-    def show_notification(self, title, subtitle="", duration_ms=2000, 
-                         background_color="#2D2D2D", title_color="white", 
-                         subtitle_color="#CCCCCC"):
-        """
-        Create and show a new notification frame.
-        
-        Args:
-            title (str): Main title text (large font)
-            subtitle (str): Subtitle text (smaller font), optional
-            duration_ms (int): Duration to show notification in milliseconds
-            background_color (str): Background color
-            title_color (str): Title text color
-            subtitle_color (str): Subtitle text color
-        """
-        # Create new notification frame
-        notification = NotificationFrame(
-            title=title,
-            subtitle=subtitle,
-            duration_ms=duration_ms,
-            background_color=background_color,
-            title_color=title_color,
-            subtitle_color=subtitle_color,
-            parent=self.parent()
-        )
-        
-        # Connect close signal
-        notification.notification_closed.connect(self._on_notification_closed)
-        
-        # Add to active list (append to end, oldest at front)
-        self.active_notifications.append(notification)
-        
-        print(f"[NotificationManager] Total active notifications: {len(self.active_notifications)}")
-        
-        # Reposition all notifications
-        self._reposition_notifications()
-        
-        # Now show the notification after positioning
-        notification.show()
-        notification.raise_()
-    
-    def _on_notification_closed(self, notification):
-        """Called when a notification is closed/destroyed."""
-        if notification in self.active_notifications:
-            self.active_notifications.remove(notification)
-            print(f"[NotificationManager] Notification closed. Remaining: {len(self.active_notifications)}")
-        
-        # Reposition remaining notifications
-        self._reposition_notifications()
-    
-    def _reposition_notifications(self):
-        """Reposition all active notifications in a vertical stack (oldest on top)."""
-        if not self.parent():
-            print("[NotificationManager] No parent widget!")
-            return
-        
-        # Use mapToGlobal to get absolute screen coordinates
-        parent_widget = self.parent()
-        parent_global_pos = parent_widget.mapToGlobal(parent_widget.rect().topLeft())
-        parent_width = parent_widget.width()
-        
-        center_x = parent_global_pos.x() + (parent_width - 400) // 2  # Center horizontally
-        current_y = parent_global_pos.y() + self.top_margin
-        
-        print(f"[NotificationManager] Repositioning {len(self.active_notifications)} notifications at x={center_x}, starting y={current_y}")
-        
-        # Position from top to bottom (oldest first)
-        for i, notification in enumerate(self.active_notifications):
-            notification.move(center_x, current_y)
-            print(f"[NotificationManager]   Notification {i} at ({center_x}, {current_y})")
-            current_y += notification.height() + self.notification_spacing
+# Removed NotificationFrame and NotificationManager classes - too CPU intensive
+# Alerts now show directly in telemetry box
 
 class F1Dashboard(QMainWindow):
     """Main dashboard window that displays gauges and car visualization."""
@@ -451,8 +283,8 @@ class F1Dashboard(QMainWindow):
         self.engine_tune_value = 0.0
         self.regen_brake_value = 0.0
         
-        # Create notification manager
-        self.notification_manager = NotificationManager(self)
+        # Alert queue for telemetry display (lightweight notification system)
+        self.alert_queue = []  # List of (title, message, timestamp) tuples
     
     def run(self):
         """Show the dashboard and run the application."""
@@ -488,60 +320,35 @@ class F1Dashboard(QMainWindow):
         """Apply telemetry data to widgets. Must run on the UI thread."""
         if 'RPM' in data:
             self.setRPM(data['RPM'])
-            data.pop('RPM')
         if 'Speed' in data:
             self.setSpeed(data['Speed'])
-            data.pop('Speed')
         if 'Throttle' in data:
             if not self.startup_animation_active:
                 self.setThrottle(data['Throttle'])
-                data.pop('Throttle')
-            else:
-                data.pop('Throttle')  # Remove but don't apply during animation
         if 'Engine Tune' in data:
             if not self.startup_animation_active:
                 self.setEnginetune(data['Engine Tune'])
-                data.pop('Engine Tune')
-            else:
-                data.pop('Engine Tune')
         if 'Regen Brake' in data:
             if not self.startup_animation_active:
                 self.setRegenBrake(data['Regen Brake'])
-                data.pop('Regen Brake')
-            else:
-                data.pop('Regen Brake')
         if 'Mode Switch' in data:
             # Detect switch press (assuming it's a boolean or toggle signal)
             if data['Mode Switch']:
                 self.toggle_right_bar_mode()
-            data.pop('Mode Switch')
         if 'Wheel Rotation' in data:
             self.setWheelRotation(data['Wheel Rotation'])
-            data.pop('Wheel Rotation')
         if 'Gear' in data:
             self.setGear(data['Gear'])
-            data.pop('Gear')
         if 'Battery' in data:
             self.setBattery(data['Battery'])
-            data.pop('Battery')
         if 'Engine Volume' in data:
             self.setEngineVolume(data['Engine Volume'])
-            data.pop('Engine Volume')
         if 'Music Volume' in data:
             self.setMusicVolume(data['Music Volume'])
-            data.pop('Music Volume')
         if 'Alert Title' in data:
-            print("[Remove Me] Received engine change alert")
             alert_title = data['Alert Title']
-            alert_text = data['Alert Message'] if 'Alert Message' in data else ""
+            alert_text = data.get('Alert Message', "")
             self.show_notification(alert_title, alert_text, 3000)
-            data.pop('Alert Title')
-            if 'Alert Message' in data:
-                data.pop('Alert Message')
-
-        # Update telemetry display with remaining fields
-        display_data = {k: v for k, v in data.items()}
-        self.updateTelemetryDisplay(display_data)
     
     def enable_fullscreen(self):
         """Enable borderless fullscreen mode suitable for Raspberry Pi."""
@@ -739,25 +546,21 @@ class F1Dashboard(QMainWindow):
         """Get the current right bar mode ('engine' or 'regen')."""
         return self.right_bar_mode
     
-    def show_notification(self, title, subtitle="", duration_ms=2000, background_color="#2D2D2D", title_color="#FFFFFF", subtitle_color="#CCCCCC"):
+    def show_notification(self, title, subtitle=""):
         """
-        Show a temporary notification that stacks with other notifications.
-        Each notification is independent and will auto-destroy after its duration.
+        Show alert in telemetry box (lightweight notification system).
         
         Args:
-            title (str): Main title text (large font)
-            subtitle (str): Subtitle text (smaller font), optional
-            duration_ms (int): Duration to show notification in milliseconds (default: 2000ms = 2 seconds)
-            background_color (str): Background color (default: dark gray)
-            title_color (str): Title text color (default: white)
-            subtitle_color (str): Subtitle text color (default: light gray)
-        
-        Example usage:
-            dashboard.show_notification("HEADLIGHTS", "ON", 1500, "#1E4A2E", "white", "#90EE90")
-            dashboard.show_notification("HAZARDS", "ACTIVATED", 2000, "#4A2E1E", "white", "#FFD700")
+            title (str): Alert title
+            subtitle (str): Alert message (optional)
         """
-        print(f"[Dashboard] show_notification called: '{title}' - '{subtitle}'")
-        self.notification_manager.show_notification(title, subtitle, duration_ms, background_color, title_color, subtitle_color)
+        # Add alert as tuple (title, message)
+        self.alert_queue.append((title, subtitle))
+        # Keep only last 3 alerts to avoid clutter
+        if len(self.alert_queue) > 3:
+            self.alert_queue.pop(0)
+
+        self.updateTelemetryDisplay()
     
     def setWheelRotation(self, angle_degrees):
         """Set the wheel rotation angle in degrees."""
@@ -807,41 +610,31 @@ class F1Dashboard(QMainWindow):
         
         return row_widget, label_widget, value_widget
     
-    def updateTelemetryDisplay(self, data_dict):
-        """Update telemetry display with ZERO widget creation - only setText() calls."""
-        if not data_dict:
-            return  # Skip hiding - waste of time
+    def updateTelemetryDisplay(self):
+        """Update telemetry display - now shows alerts only."""
+        # Show alerts in telemetry box
+        num_alerts = len(self.alert_queue)
         
-        data_keys = list(data_dict.keys())
-        num_items = len(data_keys)
+        if num_alerts == 0:
+            # Hide all rows if no alerts
+            for i in range(self._max_telemetry_rows):
+                self._telemetry_widget_pool[i]['row'].hide()
+            return
         
-        # Batch updates to reduce repaints (Qt will batch automatically, but we help it)
-        updates_made = False
-        
-        # Update visible rows with new data (ONLY setText calls when values change)
-        for i in range(min(num_items, self._max_telemetry_rows)):
-            key = data_keys[i]
-            value = data_dict[key]
+        # Show alerts (newest at top)
+        for i in range(min(num_alerts, self._max_telemetry_rows)):
+            alert_idx = num_alerts - 1 - i  # Reverse order (newest first)
+            alert_title, alert_message = self.alert_queue[alert_idx]
             pool_entry = self._telemetry_widget_pool[i]
             
-            # Only update label if key changed
-            if pool_entry['key'] != key:
-                pool_entry['label'].setText(f"{key}:")
-                pool_entry['key'] = key
-                pool_entry['row'].show()
-                updates_made = True
-            
-            # Only update value if it actually changed (crucial optimization)
-            value_str = str(value)
-            if pool_entry.get('last_value') != value_str:
-                pool_entry['value'].setText(value_str)
-                pool_entry['last_value'] = value_str
-                updates_made = True
+            # Show title on left, message on right
+            pool_entry['label'].setText(f"🔔 {alert_title}")
+            pool_entry['value'].setText(alert_message)
+            pool_entry['row'].show()
         
-        # Optional: force a single repaint if any updates were made
-        # Qt usually batches these automatically, but this ensures it happens
-        if updates_made and num_items < 5:  # Only for small updates
-            self.telemetry_content_widget.update()
+        # Hide unused rows
+        for i in range(num_alerts, self._max_telemetry_rows):
+            self._telemetry_widget_pool[i]['row'].hide()
     
     def clearLayout(self, layout):
         """Helper method to clear a layout recursively."""
