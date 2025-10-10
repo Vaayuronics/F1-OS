@@ -247,7 +247,7 @@ class GaugeWidget(QWidget):
         if self.throttle > 0:
             gradient = QConicalGradient(geom["center"], start_angle)
             gradient.setColorAt(0.0, QColor(0, 255, 0))      # Green at start
-            #gradient.setColorAt(0.5, QColor(255, 255, 0))    # Yellow at 50%
+            gradient.setColorAt(0.5, QColor(255, 255, 0))    # Yellow at 50%
             #gradient.setColorAt(0.75, QColor(255, 165, 0))   # Orange at 75%
             #gradient.setColorAt(1.0, QColor(255, 0, 0))      # Red at end
             painter.setPen(QPen(QBrush(gradient), arc_thickness, Qt.SolidLine, Qt.RoundCap))
