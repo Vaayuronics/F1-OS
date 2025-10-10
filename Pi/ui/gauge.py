@@ -250,11 +250,11 @@ class GaugeWidget(QWidget):
             gradient = QConicalGradient(geom["center"], start_angle)
             
             # Reversed color order for counter-clockwise arc: Red -> Orange -> Yellow -> Green
-            gradient.setColorAt(0.0, QColor(255, 0, 0))        # Red at start (will be at end of arc)
-            gradient.setColorAt(0.1875, QColor(255, 165, 0))   # Orange at 25% of arc (0.25 * 0.75)
-            gradient.setColorAt(0.375, QColor(255, 255, 0))    # Yellow at 50% of arc (0.5 * 0.75)
+            gradient.setColorAt(0.1, QColor(255, 0, 0))        # Red at start (will be at end of arc)
+            gradient.setColorAt(0.3, QColor(255, 165, 0))   # Orange at 25% of arc (0.25 * 0.75)
+            gradient.setColorAt(0.5, QColor(255, 255, 0))    # Yellow at 50% of arc (0.5 * 0.75)
             gradient.setColorAt(0.75, QColor(0, 255, 0))       # Green at end (will be at start of arc)
-            gradient.setColorAt(1.0, QColor(0, 255, 0))        # Keep green for remaining circle
+            #gradient.setColorAt(1.0, QColor(0, 255, 0))        # Keep green for remaining circle
             
             painter.setPen(QPen(QBrush(gradient), arc_thickness, Qt.SolidLine, Qt.RoundCap))
             painter.drawArc(
