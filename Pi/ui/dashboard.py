@@ -7,7 +7,7 @@ from ui.car2d import Car2DWidget
 from ui.battery_gauge import BatteryGaugeWidget
 from ui.volume_gauge import VolumeGaugeWidget
 import sys
-import time
+import datetime
 
 MAX_RPM = 14000 # Max RPM for the gauge, actual should go to about 14.5k
 UPDATE_MS = 50  # Update interval in milliseconds (20Hz - reduced from 30Hz to lower CPU usage on Pi)
@@ -348,7 +348,11 @@ class F1Dashboard(QMainWindow):
         if 'Alert Title' in data:
             alert_title = data['Alert Title']
             alert_text = data.get('Alert Message', "")
-            self.show_notification(alert_title, alert_text)
+            # Get current time and format as HH:MM:SS
+            current_time = datetime.datetime.now().strftime("%H:%M:%S")
+            formatted_title = f"{alert_title} {current_time}"
+            self.show_notification(formatted_title, alert_text)
+            print("[Remove Me] Giving change to alert system")
     
     def enable_fullscreen(self):
         """Enable borderless fullscreen mode suitable for Raspberry Pi."""
