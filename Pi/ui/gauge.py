@@ -245,17 +245,30 @@ class GaugeWidget(QWidget):
         painter.drawArc(arc_rect, start_angle * 16, span_angle * 16)
 
         if self.throttle > 0:
-            gradient = QConicalGradient(geom["center"], start_angle - 90)
-            gradient.setColorAt(0.0, QColor(0, 255, 0))
-            gradient.setColorAt(0.33, QColor(255, 255, 0))
-            gradient.setColorAt(0.66, QColor(255, 165, 0))
-            gradient.setColorAt(1.0, QColor(255, 0, 0))
-            painter.setPen(QPen(QBrush(gradient), arc_thickness, Qt.SolidLine, Qt.RoundCap))
-            painter.drawArc(
-                arc_rect,
-                start_angle * 16,
-                int(span_angle * 16 * self.throttle)
-            )
+            segments = [
+                (0.5, QColor(0, 255, 0)),
+                (0.7, QColor(255, 255, 0)),
+                (0.9, QColor(255, 165, 0)),
+                (1.0, QColor(255, 0, 0)),
+            ]
+            current_start = start_angle
+            consumed = 0.0
+            for limit, color in segments:
+                if self.throttle <= consumed:
+                    break
+                segment_end = min(self.throttle, limit)
+                if segment_end <= consumed:
+                    continue
+                draw_ratio = segment_end - consumed
+                segment_span = span_angle * draw_ratio
+                painter.setPen(QPen(color, arc_thickness, Qt.SolidLine, Qt.RoundCap))
+                painter.drawArc(
+                    arc_rect,
+                    int(current_start * 16),
+                    int(segment_span * 16)
+                )
+                current_start += segment_span
+                consumed = segment_end
 
         center = geom["center"]
         inner_radius = geom["throttle_inner_radius"]
