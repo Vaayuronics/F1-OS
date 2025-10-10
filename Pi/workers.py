@@ -9,7 +9,7 @@ serialization overhead of ``multiprocessing.Manager`` objects.
 from __future__ import annotations
 
 import time
-from typing import Dict, Iterable, Optional
+from typing import Dict, Optional
 
 from PySide6.QtCore import QObject, Qt, QTimer, Signal, Slot
 
@@ -196,9 +196,11 @@ class HardwareWorker(QObject):
         return self._arduino.poll()
 
     def _process_inputs(self, pico_data: Optional[dict], arduino_data: Optional[dict]) -> None:
+        consumables: list[str] = []
+
         if pico_data:
-            self._handle_pico_buttons(pico_data.get("Buttons", {}))
-            self._handle_pico_knobs(pico_data.get("Knobs", {}))
+            consumables.extend(self._handle_pico_buttons(pico_data.get("Buttons", {})))
+            consumables.extend(self._handle_pico_knobs(pico_data.get("Knobs", {})))
 
         if arduino_data and {"Throttle", "Speed", "Brake"}.issubset(arduino_data):
             accel, idle, play_speed, rpm = self._calculate_speed_rpm(
@@ -222,11 +224,14 @@ class HardwareWorker(QObject):
             self._prev_time = time.time()
             self._update_rpm_lights(rpm)
 
+        if consumables:
+            self._consume_press_states(consumables)
+
         self._emit_payloads()
 
-    def _handle_pico_buttons(self, buttons: dict) -> None:
+    def _handle_pico_buttons(self, buttons: dict) -> list[str]:
         if not buttons:
-            return
+            return []
 
         pressed_buttons = {
             name
@@ -323,11 +328,11 @@ class HardwareWorker(QObject):
 
         self._sound_state["Horn"] = bool(buttons.get("Horn", {}).get("Down"))
 
-        self._consume_press_states(consumable_buttons)
+        return list(consumable_buttons)
 
-    def _handle_pico_knobs(self, knobs: dict) -> None:
+    def _handle_pico_knobs(self, knobs: dict) -> list[str]:
         if not knobs:
-            return
+            return []
 
         engine_knob = knobs.get("Engine Vol")
         pressed_knobs = {
@@ -369,7 +374,7 @@ class HardwareWorker(QObject):
             tune_value = _clamp(tune_knob.get("Count", 0) / 100.0, 0.0, 1.0)
             self._ui_state["Engine Tune"] = tune_value
 
-        self._consume_press_states(consumable_knobs)
+        return list(consumable_knobs)
 
     def _calculate_speed_rpm(
         self,
@@ -450,11 +455,11 @@ class HardwareWorker(QObject):
         self._ui_state["Alert Title"] = title
         self._ui_state["Alert Message"] = message
 
-    def _consume_press_states(self, names: Iterable[str]) -> None:
+    def _consume_press_states(self, names: list[str]) -> None:
         if not names or not self._pico:
             return
         try:
-            self._pico.send({"command": "consume states", "button": names})
+            self._pico.send({"command": "consume states", "buttons": sorted(set(names))})
         except Exception as exc:  # pragma: no cover - best effort
             self.error.emit(f"Failed to consume state for {names}: {exc}")
 
