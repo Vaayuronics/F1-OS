@@ -183,6 +183,7 @@ def play_f1_audio(accel, play_speed: float, idle: bool):
     
     data = None
     actual_speed = play_speed
+    should_loop_chunk = False  # Whether to loop the same chunk position
     
     # Force idle state if RPM <= 2000
     if idle:
@@ -190,37 +191,47 @@ def play_f1_audio(accel, play_speed: float, idle: bool):
         idled = True
         maxed = False
         actual_speed = 1.0  # Play idle at normal speed
+        should_loop_chunk = False  # Always advance through idle sound
     elif accel is None:
         # No significant RPM change (within ±300) - loop current/previous chunk
-        # Keep current state (maxed/idled) and replay from previous position
+        # BUT only if we're in transition (not at idle or maxed)
         if idled:
+            # At idle - keep playing idle normally
             data = f1_v10['idle']
             actual_speed = 1.0
+            should_loop_chunk = False  # Continue playing idle normally
         elif maxed:
+            # At max RPM - keep playing max rpm normally
             data = f1_v10['max_rpm']
             actual_speed = 1.0
+            should_loop_chunk = False  # Continue playing max rpm normally
         else:
-            # In transition - use accel sound at previous position
+            # In transition (accel or decel sound) - loop the chunk
             data = f1_v10['accel']
             actual_speed = play_speed
+            should_loop_chunk = True  # Loop current chunk in transition
     elif accel and maxed:
         # Already at max RPM and still accelerating
         data = f1_v10['max_rpm']
         actual_speed = 1.0
+        should_loop_chunk = False  # Continue playing max rpm normally
     elif accel and not maxed:
         # Accelerating
         data = f1_v10['accel']
         idled = False  # Reset idled when accelerating
         actual_speed = play_speed
+        should_loop_chunk = False
     elif not accel and idled:
         # Already idling and still decelerating
         data = f1_v10['idle']
         actual_speed = 1.0
+        should_loop_chunk = False  # Continue playing idle normally
     elif not accel and not idled:
         # Decelerating
         data = f1_v10['decel']
         maxed = False  # Reset maxed when decelerating
         actual_speed = play_speed
+        should_loop_chunk = False
     
     # Transform audio chunk
     chunk_data = EngineAudioPlayer.transform_audio(data, curtime, engineer.get_chunk_duration(), actual_speed)
@@ -245,9 +256,9 @@ def play_f1_audio(accel, play_speed: float, idle: bool):
             play_f1_audio(accel, play_speed, idle)  # Recursively call to loop current track
             return
     
-    # Update time position for next chunk (only if accel is not None)
-    if accel is not None:
+    # Update time position for next chunk (only if not looping)
+    if not should_loop_chunk:
         curtime += engineer.get_chunk_duration() * actual_speed
-    # If accel is None, keep curtime the same to loop the same chunk region
+    # If should_loop_chunk is True, keep curtime the same to loop the same chunk region
     
     engineer.play_chunk(chunk_data)

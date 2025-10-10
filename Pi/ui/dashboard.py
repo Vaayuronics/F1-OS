@@ -348,7 +348,7 @@ class F1Dashboard(QMainWindow):
         if 'Alert Title' in data:
             alert_title = data['Alert Title']
             alert_text = data.get('Alert Message', "")
-            self.show_notification(alert_title, alert_text, 3000)
+            self.show_notification(alert_title, alert_text)
     
     def enable_fullscreen(self):
         """Enable borderless fullscreen mode suitable for Raspberry Pi."""
