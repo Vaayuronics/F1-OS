@@ -162,6 +162,7 @@ class F1Dashboard(QMainWindow):
         self._telemetry_widget_pool = {}  # Pool of reusable row widgets
         self._telemetry_active_keys = []  # Currently displayed keys in order
         self._max_telemetry_rows = 20  # Pre-allocate this many rows
+        self._telemetry_history = []  # Rolling alert history for scroll panel
         
         # Pre-create widget pool
         scroll_width = self.telemetry_scroll.width()
@@ -564,10 +565,13 @@ class F1Dashboard(QMainWindow):
         self.car_widget.animate_wheel_rotation(wheel_rpm)
     
     def resetValues(self):
-        """Reset all dashboard values to zero/default."""
+        """Reset dashboard visuals to a powered-down state."""
         self.rpm_gauge.setValue(0)
         self.rpm_gauge.setThrottle(0)
         self.mph_gauge.setValue(0)
+        self.mph_gauge.setThrottle(0)
+        self.engine_tune_value = 0.0
+        self.regen_brake_value = 0.0
     
     def _create_telemetry_row(self, base_font_size):
         """Create a reusable telemetry row widget."""
@@ -596,42 +600,35 @@ class F1Dashboard(QMainWindow):
         return row_widget, label_widget, value_widget
     
     def updateTelemetryDisplay(self, alert_title="", alert_message=""):
-        """Update telemetry display with current alert.
-        
-        Args:
-            alert_title (str): Alert title to display
-            alert_message (str): Alert message/subtitle to display
-        """
-        # Store current alert
+        """Append telemetry alert to the scrollable history instead of clearing."""
+        # Store current alert (kept for backwards compatibility with callers)
         self.current_alert_title = alert_title
         self.current_alert_message = alert_message
-        
+
         if not alert_title:
-            # Hide all rows if no alert
-            for i in range(self._max_telemetry_rows):
-                self._telemetry_widget_pool[i]['row'].hide()
             return
-        
-        # Show title in first row
-        pool_entry = self._telemetry_widget_pool[0]
-        pool_entry['label'].setText("Alert:")
-        pool_entry['value'].setText(alert_title)
-        pool_entry['row'].show()
-        
-        # Show message in second row if provided
-        if alert_message:
-            pool_entry_msg = self._telemetry_widget_pool[1]
-            pool_entry_msg['label'].setText("")
-            pool_entry_msg['value'].setText(alert_message)
-            pool_entry_msg['row'].show()
-            
-            # Hide remaining rows
-            for i in range(2, self._max_telemetry_rows):
-                self._telemetry_widget_pool[i]['row'].hide()
-        else:
-            # Hide remaining rows if no message
-            for i in range(1, self._max_telemetry_rows):
-                self._telemetry_widget_pool[i]['row'].hide()
+
+        # Append new entry to history and clamp to pool capacity
+        entry = (alert_title, alert_message)
+        self._telemetry_history.append(entry)
+        if len(self._telemetry_history) > self._max_telemetry_rows:
+            self._telemetry_history = self._telemetry_history[-self._max_telemetry_rows:]
+
+        # Render history using the pre-created widget pool
+        visible_entries = self._telemetry_history[-self._max_telemetry_rows:]
+        for idx in range(self._max_telemetry_rows):
+            pool_entry = self._telemetry_widget_pool[idx]
+            if idx < len(visible_entries):
+                title_text, message_text = visible_entries[idx]
+                pool_entry['label'].setText(title_text)
+                pool_entry['value'].setText(message_text)
+                pool_entry['row'].show()
+            else:
+                pool_entry['row'].hide()
+
+        # Ensure the scroll area shows the latest alert
+        scrollbar = self.telemetry_scroll.verticalScrollBar()
+        scrollbar.setValue(scrollbar.maximum())
     
     def clearLayout(self, layout):
         """Helper method to clear a layout recursively."""
@@ -709,9 +706,18 @@ class F1Dashboard(QMainWindow):
 
     
     def closeEvent(self, event):
-        """Override close event to save settings before closing.""" 
+        """Override close event to stop timers, clear gauges, and save layout.""" 
+        self._perform_shutdown_cleanup()
         self.save_splitter_settings()
         super().closeEvent(event)
+
+    def _perform_shutdown_cleanup(self):
+        """Stop running timers and clear visual indicators."""
+        if self.data_timer.isActive():
+            self.data_timer.stop()
+        if self.startup_timer.isActive():
+            self.startup_timer.stop()
+        self.resetValues()
     
     def set_telemetry_box_size(self, width, height):
         """
