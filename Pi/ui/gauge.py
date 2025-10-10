@@ -245,16 +245,29 @@ class GaugeWidget(QWidget):
         painter.drawArc(arc_rect, start_angle * 16, span_angle * 16)
 
         if self.throttle > 0:
-            # Our arc sweeps 270° counter-clockwise, but QConicalGradient applies colors clockwise
-            # So we need to reverse the color order and map to our 270° arc (0.75 of full circle)
-            gradient = QConicalGradient(geom["center"], start_angle)
+            # Arc draws from 225° counter-clockwise by -270° (to -45°/315°)
+            # QConicalGradient: angle 0.0 is at 0°, progresses clockwise
+            # Our arc: 225° to 315° going counter-clockwise (or equivalently: 225° to -45°)
+            # 
+            # The gradient should start at 225° (where our arc starts drawing from)
+            # Since arc goes counter-clockwise but gradient is clockwise, we go "backwards" through gradient
+            # From 225° counter-clockwise to 315° is: 225° -> 180° -> 90° -> 0° -> 315°
+            # That's going backwards 270° in the gradient (from position 0.625 to position 0.875)
             
-            # Reversed color order for counter-clockwise arc: Red -> Orange -> Yellow -> Green
-            gradient.setColorAt(-0.3, QColor(255, 0, 0))        # Red at start (will be at end of arc)
-            gradient.setColorAt(0.0, QColor(255, 165, 0))   # Orange at 25% of arc (0.25 * 0.75)
-            gradient.setColorAt(0.1, QColor(255, 255, 0))    # Yellow at 50% of arc (0.5 * 0.75)
-            gradient.setColorAt(0.8, QColor(0, 255, 0))       # Green at end (will be at start of arc)
-            #gradient.setColorAt(1.0, QColor(0, 255, 0))        # Keep green for remaining circle
+            gradient = QConicalGradient(geom["center"], 0)  # Standard 0° start
+            
+            # 225° is at position 225/360 = 0.625 in the gradient
+            # 315° (-45°) is at position 315/360 = 0.875 in the gradient  
+            # Our arc spans from 0.625 backwards to 0.875 (wrapping around through 0)
+            # So: 0.625 -> 0 -> 0.875 (going counter-clockwise)
+            # That's a "reversed" span where we want Green at 225° (0.625) and Red at 315° (0.875)
+            
+            # Set colors going BACKWARDS from where arc draws
+            gradient.setColorAt(0.875, QColor(255, 0, 0))      # Red at 315° (arc end)
+            gradient.setColorAt(0.9375, QColor(255, 165, 0))   # Orange at 337.5° (87.5% through)
+            gradient.setColorAt(0.0, QColor(255, 255, 0))      # Yellow at 0° (50% through arc)
+            gradient.setColorAt(0.3125, QColor(255, 255, 0))   # Yellow continues to 112.5°
+            gradient.setColorAt(0.625, QColor(0, 255, 0))      # Green at 225° (arc start)
             
             painter.setPen(QPen(QBrush(gradient), arc_thickness, Qt.SolidLine, Qt.RoundCap))
             painter.drawArc(

@@ -179,4 +179,4 @@ cython_debug/
 .vscode
 
 #Settings files
-Pi/ui/dashboard_settings.ini
+ui/dashboard_settings.ini
