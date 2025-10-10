@@ -263,11 +263,14 @@ class GaugeWidget(QWidget):
             # That's a "reversed" span where we want Green at 225° (0.625) and Red at 315° (0.875)
             
             # Set colors going BACKWARDS from where arc draws
-            gradient.setColorAt(0.875, QColor(255, 0, 0))      # Red at 315° (arc end)
-            gradient.setColorAt(0.9375, QColor(255, 165, 0))   # Orange at 337.5° (87.5% through)
-            gradient.setColorAt(0.0, QColor(255, 255, 0))      # Yellow at 0° (50% through arc)
-            gradient.setColorAt(0.3125, QColor(255, 255, 0))   # Yellow continues to 112.5°
-            gradient.setColorAt(0.625, QColor(0, 255, 0))      # Green at 225° (arc start)
+            # Smooth gradient progression: Green -> Yellow -> Orange -> Red
+            gradient.setColorAt(0.625, QColor(0, 255, 0))      # Green at 225° (arc start, 0% throttle)
+            gradient.setColorAt(0.46875, QColor(128, 255, 0))  # Green-Yellow blend
+            gradient.setColorAt(0.3125, QColor(255, 255, 0))   # Yellow at 112.5° (~40% throttle)
+            gradient.setColorAt(0.15625, QColor(255, 255, 0))  # Yellow at 56.25°
+            gradient.setColorAt(0.0, QColor(255, 210, 0))      # Yellow-Orange blend at 0° (~60% throttle)
+            gradient.setColorAt(0.90625, QColor(255, 165, 0))  # Orange at 326.25° (~80% throttle)
+            gradient.setColorAt(0.875, QColor(255, 0, 0))      # Red at 315° (arc end, 100% throttle)
             
             painter.setPen(QPen(QBrush(gradient), arc_thickness, Qt.SolidLine, Qt.RoundCap))
             painter.drawArc(

@@ -5,8 +5,6 @@ import platform
 from PySide6.QtCore import QCoreApplication, QThread
 import ui.dashboard as dash
 
-
-
 def _print_startup_info() -> None:
     print(f"[Main] Python {platform.python_version()} on {platform.platform()}")
     print(f"[Main] PID {os.getpid()} starting F1-OS dashboard")

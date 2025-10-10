@@ -153,13 +153,11 @@ class HardwareWorker(QObject):
                 self.error.emit(f"Lights cleanup failed: {exc}")
         if self._pico:
             try:
-                self._pico.send({"command": "stop"})
                 self._pico.ser.close()
             except Exception as exc:  # pragma: no cover - best effort
                 self.error.emit(f"Pico cleanup failed: {exc}")
         if self._arduino:
             try:
-                self._arduino.send({"command": "stop"})
                 self._arduino.ser.close()
             except Exception as exc:  # pragma: no cover - best effort
                 self.error.emit(f"Arduino cleanup failed: {exc}")
