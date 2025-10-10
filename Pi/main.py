@@ -76,4 +76,5 @@ def ui_test() -> None:
     sys.exit(exit_code)
 
 if __name__ == "__main__":
-    ui_test()
+    boot()
+    #ui_test()
