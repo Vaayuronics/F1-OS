@@ -70,6 +70,7 @@ def ui_test() -> None:
     _print_startup_info()
     dashboard = dash.F1Dashboard("ui/dashboard_settings.ini")
     _install_signal_handlers(dashboard.app)
+    dashboard.enable_fullscreen()
     exit_code = dashboard.run()
     sys.exit(exit_code)
 
