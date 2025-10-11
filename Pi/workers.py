@@ -556,6 +556,7 @@ class AudioWorker(QObject):
                     self.error.emit(f"Failed to set engine mode: {exc}")
 
             try:
+                print(f"Play speed {state.get('Play Speed', 1.0)}")
                 sound.play_engine(
                     state.get("Accel"),
                     state.get("Play Speed", 1.0),
