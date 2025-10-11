@@ -7,7 +7,7 @@ from ui.car2d import Car2DWidget
 from ui.battery_gauge import BatteryGaugeWidget
 from ui.volume_gauge import VolumeGaugeWidget
 import sys
-import datetime
+import time
 
 MAX_RPM = 14000 # Max RPM for the gauge, actual should go to about 14.5k
 UPDATE_MS = 50  # Update interval in milliseconds (20Hz - reduced from 30Hz to lower CPU usage on Pi)
@@ -352,7 +352,7 @@ class F1Dashboard(QMainWindow):
             if alert_title != "":
                 signature = (alert_title, alert_text)
                 if signature != self._last_alert_signature:
-                    current_time = datetime.datetime.now().strftime("%H:%M:%S")
+                    current_time = time.strftime("%H:%M:%S")
                     formatted_title = f"{alert_title} {current_time}"
                     self.updateTelemetryDisplay(formatted_title, alert_text)
                     self._last_alert_signature = signature

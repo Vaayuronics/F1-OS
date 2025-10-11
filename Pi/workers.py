@@ -525,13 +525,13 @@ class AudioWorker(QObject):
 
     def _process_audio(self) -> None:
         try:
-            print("audio tick")
+            print(f"audio tick {time.strftime('%M:%S')}")
             if not self._running or self._state is None:
-                print("audio tick stopped")
+                print(f"audio tick not run {time.strftime('%M:%S')}")
                 return
 
             state = dict(self._state)
-            print("audio chunk triggered")
+            print(f"audio chunk triggered {time.strftime('%M:%S')}")
 
             if state.pop("Start", False):
                 try:
