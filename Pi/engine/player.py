@@ -6,6 +6,7 @@ import resampy
 from threading import Thread, Lock, current_thread
 import librosa
 from scipy.io import wavfile
+import time
 
 SAMPLE_RATE = 44100  # Sample rate for audio playback
    
@@ -163,6 +164,7 @@ class EngineAudioPlayer:
                     else:
                         chunk = None
                 
+                print(f"Writing chunk {time.strftime('%M:%S')}")
                 if chunk is not None:
                     self.stream.write(chunk)
                     
@@ -191,6 +193,7 @@ class EngineAudioPlayer:
                 print("Audio player is not running")
                 return False
 
+        print(f"Playing chunk {time.strftime('%M:%S')}")
         # Mono audio - simple 1D array, no conversion needed
         chunk = data
         
