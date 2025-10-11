@@ -470,8 +470,8 @@ class AudioWorker(QObject):
         super().__init__(parent)
         self._tick_interval_ms = int(tick_interval_s * 1000)
         self._timer = QTimer(self)
+        self._timer.setInterval(self._tick_interval_ms)
         self._timer.setTimerType(Qt.PreciseTimer)
-        self._timer.setSingleShot(True)
         self._timer.timeout.connect(self._process_audio)
 
         self._state_defaults: Dict[str, float | int | bool | None] = {
@@ -501,7 +501,7 @@ class AudioWorker(QObject):
             self.error.emit(f"Audio init warning: {exc}")
         self._running = True
         self.status.emit("Audio worker starting")
-        self._schedule_next_tick()
+        self._timer.start()
 
     @Slot()
     def stop(self) -> None:
@@ -519,11 +519,8 @@ class AudioWorker(QObject):
         # Merge into baseline so timer keeps working when fields are omitted
         self._state.update(payload)
 
-    def _schedule_next_tick(self) -> None:
-        if self._running:
-            self._timer.start(self._tick_interval_ms)
-
     def _process_audio(self) -> None:
+        work_start = time.perf_counter()
         try:
             print(f"audio tick {time.strftime('%M:%S')}")
             if not self._running or self._state is None:
@@ -568,6 +565,9 @@ class AudioWorker(QObject):
             except Exception as exc:  # pragma: no cover - best effort
                 self.error.emit(f"Engine audio tick failed: {exc}")
         finally:
-            self._schedule_next_tick()
+            duration = time.perf_counter() - work_start
+            print(f"audio tick duration {duration:.3f}s")
+            if not self._timer.isActive() and self._running:
+                self._timer.start()
 
     #TODO: Music playback left disabled as in original code (commented out)
