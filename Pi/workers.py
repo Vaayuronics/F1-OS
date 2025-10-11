@@ -470,8 +470,8 @@ class AudioWorker(QObject):
         super().__init__(parent)
         self._tick_interval_ms = int(tick_interval_s * 1000)
         self._timer = QTimer(self)
-        self._timer.setInterval(self._tick_interval_ms)
         self._timer.setTimerType(Qt.PreciseTimer)
+        self._timer.setSingleShot(True)
         self._timer.timeout.connect(self._process_audio)
 
         self._state_defaults: Dict[str, float | int | bool | None] = {
@@ -501,7 +501,7 @@ class AudioWorker(QObject):
             self.error.emit(f"Audio init warning: {exc}")
         self._running = True
         self.status.emit("Audio worker starting")
-        self._timer.start()
+        self._schedule_next_tick()
 
     @Slot()
     def stop(self) -> None:
@@ -519,46 +519,53 @@ class AudioWorker(QObject):
         # Merge into baseline so timer keeps working when fields are omitted
         self._state.update(payload)
 
+    def _schedule_next_tick(self) -> None:
+        if self._running:
+            self._timer.start(self._tick_interval_ms)
+
     def _process_audio(self) -> None:
-        print("audio tick")
-        if not self._running or self._state is None:
-            print("audio tick skipped")
-            return
-        state = dict(self._state)
-        print("audio chunk triggered")
-        if state.pop("Start", False):
-            try:
-                sound.play_f1_start()
-                sound.reset_curtime()
-            except Exception as exc:  # pragma: no cover - best effort
-                self.error.emit(f"Failed to play start sound: {exc}")
-
-        if state.pop("Change Track", False):
-            try:
-                sound.change_track(sound.current_track() + 1)
-            except Exception as exc:  # pragma: no cover - best effort
-                self.error.emit(f"Failed to change track: {exc}")
-
-        if state.get("Horn"):
-            try:
-                sound.play_horn()
-            except Exception as exc:  # pragma: no cover - best effort
-                self.error.emit(f"Failed to play horn: {exc}")
-
-        if "Porche" in state:
-            try:
-                sound.set_porche_mode(bool(state["Porche"]))
-            except Exception as exc:  # pragma: no cover - best effort
-                self.error.emit(f"Failed to set engine mode: {exc}")
-
         try:
-            sound.play_engine(
-                state.get("Accel"),
-                state.get("Play Speed", 1.0),
-                int(state.get("Engine Volume", 0)),
-                bool(state.get("Idle", False)),
-            )
-        except Exception as exc:  # pragma: no cover - best effort
-            self.error.emit(f"Engine audio tick failed: {exc}")
+            if not self._running or self._state is None:
+                return
+
+            state = dict(self._state)
+            print("audio chunk triggered")
+
+            if state.pop("Start", False):
+                try:
+                    sound.play_f1_start()
+                    sound.reset_curtime()
+                except Exception as exc:  # pragma: no cover - best effort
+                    self.error.emit(f"Failed to play start sound: {exc}")
+
+            if state.pop("Change Track", False):
+                try:
+                    sound.change_track(sound.current_track() + 1)
+                except Exception as exc:  # pragma: no cover - best effort
+                    self.error.emit(f"Failed to change track: {exc}")
+
+            if state.get("Horn"):
+                try:
+                    sound.play_horn()
+                except Exception as exc:  # pragma: no cover - best effort
+                    self.error.emit(f"Failed to play horn: {exc}")
+
+            if "Porche" in state:
+                try:
+                    sound.set_porche_mode(bool(state["Porche"]))
+                except Exception as exc:  # pragma: no cover - best effort
+                    self.error.emit(f"Failed to set engine mode: {exc}")
+
+            try:
+                sound.play_engine(
+                    state.get("Accel"),
+                    state.get("Play Speed", 1.0),
+                    int(state.get("Engine Volume", 0)),
+                    bool(state.get("Idle", False)),
+                )
+            except Exception as exc:  # pragma: no cover - best effort
+                self.error.emit(f"Engine audio tick failed: {exc}")
+        finally:
+            self._schedule_next_tick()
 
     #TODO: Music playback left disabled as in original code (commented out)
