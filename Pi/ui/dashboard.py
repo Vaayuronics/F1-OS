@@ -642,6 +642,10 @@ class F1Dashboard(QMainWindow):
                 pool_entry['row'].hide()
 
         # Ensure the scroll area shows the latest alert
+        QTimer.singleShot(0, self._scroll_telemetry_to_bottom)
+
+    def _scroll_telemetry_to_bottom(self):
+        """Scroll telemetry panel to the latest entry."""
         scrollbar = self.telemetry_scroll.verticalScrollBar()
         scrollbar.setValue(scrollbar.maximum())
     
