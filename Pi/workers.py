@@ -520,7 +520,9 @@ class AudioWorker(QObject):
         self._state.update(payload)
 
     def _process_audio(self) -> None:
+        print("audio tick")
         if not self._running or self._state is None:
+            print("audio tick skipped")
             return
         state = dict(self._state)
         print("audio chunk triggered")
