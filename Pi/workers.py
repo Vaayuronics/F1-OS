@@ -17,14 +17,11 @@ from devices.testerial import JSONSerialReader
 from devices.light_manager import LightManager
 import engine.soundsys as sound
 
-
 MAX_RPM = 14000
 MAX_THROTTLE_DEG = 135
 
-
 def _clamp(value: float, minimum: float, maximum: float) -> float:
     return max(minimum, min(maximum, value))
-
 
 class HardwareWorker(QObject):
     """Poll hardware and broadcast UI/audio updates."""
@@ -463,7 +460,6 @@ class HardwareWorker(QObject):
         except Exception as exc:  # pragma: no cover - best effort
             self.error.emit(f"Failed to consume state for {names}: {exc}")
 
-
 class AudioWorker(QObject):
     """Handle audio playback on a dedicated Qt thread."""
 
@@ -511,7 +507,7 @@ class AudioWorker(QObject):
         if not self._running or not self._state:
             return
         state = dict(self._state)
-
+        print("audio chunk triggered")
         if state.pop("Start", False):
             try:
                 sound.play_f1_start()
@@ -547,4 +543,4 @@ class AudioWorker(QObject):
         except Exception as exc:  # pragma: no cover - best effort
             self.error.emit(f"Engine audio tick failed: {exc}")
 
-    # Music playback left disabled as in original code (commented out)
+    #TODO: Music playback left disabled as in original code (commented out)

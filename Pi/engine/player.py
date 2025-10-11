@@ -250,4 +250,11 @@ class EngineAudioPlayer:
         except Exception:
             pass
 
+    def buffer_fill(self) -> tuple[int, int]:
+        """Return the current queue fill level and capacity."""
+        with self.queue_lock:
+            size = self.buffer.qsize()
+            capacity = self.buffer.maxsize if self.buffer.maxsize > 0 else float("inf")
+        return size, capacity
+
 
