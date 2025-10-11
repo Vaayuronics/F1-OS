@@ -266,6 +266,7 @@ class F1Dashboard(QMainWindow):
         # Current alert for telemetry display (lightweight notification system)
         self.current_alert_title = ""
         self.current_alert_message = ""
+        self._last_alert_signature = None
     
     def run(self):
         """Show the dashboard and run the application."""
@@ -340,13 +341,19 @@ class F1Dashboard(QMainWindow):
         if 'Alert Title' in data:
             alert_title = data['Alert Title']
             alert_text = data.get('Alert Message', "")
-            # Update telemetry display directly with alert data
-            if alert_title != "":  # Only update if there's an actual alert
-                # Get current time and format as HH:MM:SS
+            if alert_title != "":
                 current_time = datetime.datetime.now().strftime("%H:%M:%S")
-                formatted_title = f"{alert_title} {current_time}"
-                self.updateTelemetryDisplay(formatted_title, alert_text)
-                print(f"[Remove Me] Receiving change from alert system\nTitle: {alert_title}\nMessage: {alert_text}")
+                signature = current_time
+                #Note: not a good implmentation for fixing double add
+                #Likely a duplicate apply issue
+                if signature != self._last_alert_signature:
+                    formatted_title = f"{alert_title} {current_time}"
+                    self.updateTelemetryDisplay(formatted_title, alert_text)
+                    self._last_alert_signature = signature
+            else:
+                self._last_alert_signature = None
+        else:
+            self._last_alert_signature = None
     
     def enable_fullscreen(self):
         """Enable borderless fullscreen mode suitable for Raspberry Pi."""
@@ -575,29 +582,30 @@ class F1Dashboard(QMainWindow):
     
     def _create_telemetry_row(self, base_font_size):
         """Create a reusable telemetry row widget."""
-        row_layout = QHBoxLayout()
+        row_layout = QVBoxLayout()
         row_layout.setContentsMargins(0, 0, 0, 0)
-        row_layout.setSpacing(6)
+        row_layout.setSpacing(2)
 
-        label_widget = QLabel()
-        label_widget.setStyleSheet(f"color: #AAA; font-size: {base_font_size}px;")
-        label_widget.setSizePolicy(QSizePolicy.Fixed, QSizePolicy.Preferred)
-        label_widget.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
-        label_widget.setFixedWidth(max(60, int(base_font_size * 2.5)))
+        title_widget = QLabel()
+        title_widget.setStyleSheet(f"color: white; font-size: {base_font_size + 1}px; font-weight: bold;")
+        title_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        title_widget.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        title_widget.setWordWrap(True)
 
-        value_widget = QLabel()
-        value_widget.setStyleSheet(f"color: white; font-size: {base_font_size}px; font-weight: bold;")
-        value_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-        value_widget.setAlignment(Qt.AlignLeft | Qt.AlignVCenter)
+        message_widget = QLabel()
+        message_widget.setStyleSheet(f"color: #DDD; font-size: {base_font_size}px;")
+        message_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
+        message_widget.setAlignment(Qt.AlignLeft | Qt.AlignTop)
+        message_widget.setWordWrap(True)
 
-        row_layout.addWidget(label_widget, 0)
-        row_layout.addWidget(value_widget, 1)
-        
+        row_layout.addWidget(title_widget)
+        row_layout.addWidget(message_widget)
+
         row_widget = QWidget()
         row_widget.setLayout(row_layout)
         row_widget.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Preferred)
-        
-        return row_widget, label_widget, value_widget
+
+        return row_widget, title_widget, message_widget
     
     def updateTelemetryDisplay(self, alert_title="", alert_message=""):
         """Append telemetry alert to the scrollable history instead of clearing."""
@@ -622,6 +630,7 @@ class F1Dashboard(QMainWindow):
                 title_text, message_text = visible_entries[idx]
                 pool_entry['label'].setText(title_text)
                 pool_entry['value'].setText(message_text)
+                pool_entry['value'].setVisible(bool(message_text))
                 pool_entry['row'].show()
             else:
                 pool_entry['row'].hide()
