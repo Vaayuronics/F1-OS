@@ -209,7 +209,8 @@ def play_f1_audio(accel, play_speed: float, idle: bool):
             # In transition (accel or decel sound) - loop the chunk
             data = f1_v10['accel']
             actual_speed = play_speed
-            should_loop_chunk = True  # Loop current chunk in transition
+            should_loop_chunk = False  # Loop current chunk in transition
+            #TODO fix loop behavior
     elif accel and maxed:
         # Already at max RPM and still accelerating
         data = f1_v10['max_rpm']
