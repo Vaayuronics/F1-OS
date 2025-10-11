@@ -525,7 +525,9 @@ class AudioWorker(QObject):
 
     def _process_audio(self) -> None:
         try:
+            print("audio tick")
             if not self._running or self._state is None:
+                print("audio tick stopped")
                 return
 
             state = dict(self._state)
