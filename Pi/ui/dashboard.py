@@ -286,7 +286,9 @@ class F1Dashboard(QMainWindow):
         if not data:
             return
         self._pending_data = dict(data)
-        self._apply_data_dict(self._pending_data)
+        # If we're not running a pull-based data source, apply immediately.
+        if not self.external_data_source:
+            self._apply_pending_data()
     
     def set_interrupted_event(self, event):
         """Set the threading.Event that signals shutdown."""
@@ -305,9 +307,15 @@ class F1Dashboard(QMainWindow):
                 self.data_timer.stop()
             except Exception as e:
                 print(f"[Dashboard] Error pulling data: {e}")
-        elif self._pending_data:
-            self._apply_data_dict(self._pending_data)
+        else:
+            self._apply_pending_data()
+
+    def _apply_pending_data(self):
+        """Apply queued telemetry from push updates once."""
+        if self._pending_data:
+            data = self._pending_data
             self._pending_data = None
+            self._apply_data_dict(data)
     
     def _apply_data_dict(self, data: dict):
         """Apply telemetry data to widgets. Must run on the UI thread."""
@@ -342,11 +350,9 @@ class F1Dashboard(QMainWindow):
             alert_title = data['Alert Title']
             alert_text = data.get('Alert Message', "")
             if alert_title != "":
-                current_time = datetime.datetime.now().strftime("%H:%M:%S")
-                signature = current_time
-                #Note: not a good implmentation for fixing double add
-                #Likely a duplicate apply issue
+                signature = (alert_title, alert_text)
                 if signature != self._last_alert_signature:
+                    current_time = datetime.datetime.now().strftime("%H:%M:%S")
                     formatted_title = f"{alert_title} {current_time}"
                     self.updateTelemetryDisplay(formatted_title, alert_text)
                     self._last_alert_signature = signature
