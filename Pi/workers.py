@@ -474,7 +474,20 @@ class AudioWorker(QObject):
         self._timer.setTimerType(Qt.PreciseTimer)
         self._timer.timeout.connect(self._process_audio)
 
-        self._state: Dict[str, float | int | bool | None] = {}
+        self._state_defaults: Dict[str, float | int | bool | None] = {
+            "Accel": None,
+            "Idle": True,
+            "Play Speed": 1.0,
+            "Engine Volume": 100,
+            "Music Volume": 100,
+            "Start": False,
+            "Launch": False,
+            "Horn": False,
+            "Porche": False,
+            "Change Track": False,
+            "Pause": False,
+        }
+        self._state: Dict[str, float | int | bool | None] = dict(self._state_defaults)
         self._running = False
 
     @Slot()
@@ -501,10 +514,13 @@ class AudioWorker(QObject):
     @Slot(dict)
     def apply_state(self, payload: dict) -> None:
         # Payload arrives on this thread thanks to queued signal delivery
-        self._state = payload
+        if not payload:
+            return
+        # Merge into baseline so timer keeps working when fields are omitted
+        self._state.update(payload)
 
     def _process_audio(self) -> None:
-        if not self._running or not self._state:
+        if not self._running or self._state is None:
             return
         state = dict(self._state)
         print("audio chunk triggered")
