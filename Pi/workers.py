@@ -566,9 +566,11 @@ class AudioWorker(QObject):
             except Exception as exc:  # pragma: no cover - best effort
                 self.error.emit(f"Engine audio tick failed: {exc}")
         finally:
+            sound.buffer_all()
             duration = time.perf_counter() - work_start
             print(f"audio tick duration {duration:.3f}s")
             if not self._timer.isActive() and self._running:
                 self._timer.start()
 
     #TODO: Music playback left disabled as in original code (commented out)
+

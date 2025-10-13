@@ -3,7 +3,7 @@ import sounddevice as sd
 import queue
 import os
 import resampy
-from threading import Thread, Lock, current_thread
+from threading import Lock, current_thread
 import librosa
 from scipy.io import wavfile
 import time
@@ -36,9 +36,6 @@ class EngineAudioPlayer:
             latency='low'
         )
         self.stream.start()
-        
-        self.writer_thread = Thread(target=self._buffer_writer, daemon=True)
-        self.writer_thread.start()
 
     def get_chunk_duration(self) -> float:
         """Get the current chunk duration in seconds."""
@@ -147,7 +144,9 @@ class EngineAudioPlayer:
         '''Save audio data to a npy file'''
         np.save(path, data)
 
-    def _buffer_writer(self):
+    def buffer_writer(self):
+        '''Writes to the output stream.
+        Should be called in a seperate thread continously.'''
         while True:
             with self.running_lock:
                 if not self.running:

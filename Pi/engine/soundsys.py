@@ -263,3 +263,9 @@ def play_f1_audio(accel, play_speed: float, idle: bool):
     # If should_loop_chunk is True, keep curtime the same to loop the same chunk region
     
     engineer.play_chunk(chunk_data)
+
+def buffer_all():
+    '''This should call the buffer writer function of all audio buffers.'''
+    engineer.buffer_writer()
+    notifier.buffer_writer()
+    musicer.buffer_writer()
