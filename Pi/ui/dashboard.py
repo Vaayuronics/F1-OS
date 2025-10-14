@@ -8,6 +8,7 @@ from ui.battery_gauge import BatteryGaugeWidget
 from ui.volume_gauge import VolumeGaugeWidget
 import sys
 import time
+import math
 
 MAX_RPM = 14000 # Max RPM for the gauge, actual should go to about 14.5k
 UPDATE_MS = 50  # Update interval in milliseconds (20Hz - reduced from 30Hz to lower CPU usage on Pi)
@@ -812,7 +813,6 @@ class F1Dashboard(QMainWindow):
     
     def start_startup_animation(self):
         """Start the startup animation sequence."""
-        import time
         self.startup_animation_active = True
         self.animation_step = 0
         self.animation_phase = 0
@@ -822,7 +822,6 @@ class F1Dashboard(QMainWindow):
     
     def _update_startup_animation(self):
         """Update the startup animation each frame."""
-        import time
         current_time = time.time()
         elapsed = current_time - self.animation_start_time
         
@@ -857,7 +856,6 @@ class F1Dashboard(QMainWindow):
             # Phase 2: Oscillate between 80-100% for 4 seconds
             if elapsed < 4.0:
                 # Create oscillation between 0.8 and 1.0
-                import math
                 oscillation_frequency = 2.0  # 2 cycles per second
                 sine_wave = math.sin(elapsed * oscillation_frequency * 2 * math.pi)
                 

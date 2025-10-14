@@ -2,6 +2,7 @@ import time
 import numpy as np
 import librosa
 import resampy
+from engine.player import EngineAudioPlayer
 
 # Pre-compile common librosa functions on import to speed up first use
 print("[Audio Init] Compiling JIT functions...")
@@ -15,8 +16,6 @@ try:
     print("[Audio Init] ✓ Audio system initialized and cached")
 except Exception as e:
     print(f"[Audio Init] Warning: Could not pre-compile audio functions: {e}")
-
-from engine.player import EngineAudioPlayer
 
 ENGINE_PATH = "engine/audio/"
 MUSIC_PATH = "engine/music/"

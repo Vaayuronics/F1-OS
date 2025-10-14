@@ -4,11 +4,11 @@ import os
 import platform
 from PySide6.QtCore import QCoreApplication, QThread
 import ui.dashboard as dash
+from workers import AudioWorker, HardwareWorker
 
 def _print_startup_info() -> None:
     print(f"[Main] Python {platform.python_version()} on {platform.platform()}")
     print(f"[Main] PID {os.getpid()} starting F1-OS dashboard")
-
 
 def _install_signal_handlers(app: QCoreApplication) -> None:
     def _handle_signal(signum, frame):
@@ -18,9 +18,7 @@ def _install_signal_handlers(app: QCoreApplication) -> None:
     signal.signal(signal.SIGINT, _handle_signal)
     signal.signal(signal.SIGTERM, _handle_signal)
 
-
 def boot() -> None:
-    from workers import AudioWorker, HardwareWorker
     _print_startup_info()
 
     dashboard = dash.F1Dashboard("ui/dashboard_settings.ini")

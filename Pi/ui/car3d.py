@@ -6,6 +6,7 @@ from PySide6.Qt3DExtras import Qt3DExtras
 from PySide6.Qt3DRender import Qt3DRender
 from PySide6.Qt3DInput import Qt3DInput
 import os
+import time
 
 class Car3DWidget(QWidget):
     """Widget that displays a 3D model of an F1 car."""
@@ -363,7 +364,6 @@ class Car3DWidget(QWidget):
         
         # For smooth animation, you might want to use a QTimer
         # This is a simple version that sets rotation based on current time
-        import time
         current_time = time.time()
         total_rotation = (current_time * degrees_per_second) % 360
         
