@@ -147,33 +147,29 @@ class EngineAudioPlayer:
     def buffer_writer(self):
         '''Writes to the output stream.
         Should be called in a seperate thread continously.'''
-        while True:
-            with self.running_lock:
-                if not self.running:
-                    break
-            
-            try:
-                with self.queue_lock:
-                    # Only start consuming when we have enough data
-                    if not self.playback_started and self.buffer.qsize() >= self.buffer_target:
-                        self.playback_started = True
-                    
-                    if self.playback_started:
-                        chunk = self.buffer.get_nowait()
-                    else:
-                        chunk = None
+        with self.running_lock:
+            if not self.running:
+                return
+
+        try:
+            chunk = None
+            with self.queue_lock:
+                # Only start consuming when we have enough data
+                if not self.playback_started and self.buffer.qsize() >= self.buffer_target:
+                    self.playback_started = True
                 
-                print(f"Writing chunk {time.strftime('%M:%S')}")
-                if chunk is not None:
-                    self.stream.write(chunk)
-                    
-            except queue.Empty:
-                with self.queue_lock:
-                    self.playback_started = False
-            except Exception as e:
-                print(f"Error in audio playback: {e}")
-                self.stop()
-                break
+                if self.playback_started and not self.buffer.empty():
+                    chunk = self.buffer.get_nowait()
+                elif self.buffer.empty():
+                    self.playback_started = False  # Pause playback if buffer is empty
+            
+            print(f"Writing chunk {time.strftime('%M:%S')}")
+            if chunk is not None:
+                self.stream.write(chunk)
+                
+        except Exception as e:
+            print(f"Error in audio playback: {e}")
+            self.stop()
 
     def is_playing(self) -> bool:
         """Check if the audio player is currently playing audio."""
