@@ -252,12 +252,14 @@ class F1Dashboard(QMainWindow):
         self.setAttribute(Qt.WA_NoSystemBackground)
         
         # Initialize startup animation variables
+        # The animation now uses a single synchronized progress value (0.0-1.0)
+        # and goes through three phases: 0=ramp-up, 1=hold/oscillate, 2=ramp-down
         self.startup_animation_active = False
         self.startup_timer = QTimer()
         self.startup_timer.timeout.connect(self._update_startup_animation)
-        self.animation_step = 0
-        self.animation_phase = 0  # 0: ramp up, 1: oscillate
+        self.animation_phase = 0  # 0: ramp-up, 1: oscillate/hold, 2: ramp-down
         self.animation_start_time = 0
+        self.animation_progress = 0.0  # single synchronized progress value
         
         # Right bar mode tracking (engine tune vs regen braking)
         self.right_bar_mode = "engine"  # "engine" or "regen"
@@ -814,90 +816,100 @@ class F1Dashboard(QMainWindow):
     def start_startup_animation(self):
         """Start the startup animation sequence."""
         self.startup_animation_active = True
-        self.animation_step = 0
         self.animation_phase = 0
         self.animation_start_time = time.time()
-        self.startup_timer.start(16)  # ~60fps animation (16ms intervals)
+        self.animation_progress = 0.0
+        # Start timer at ~60fps
+        self.startup_timer.start(16)
         print("Starting startup animation...")
     
     def _update_startup_animation(self):
         """Update the startup animation each frame."""
         current_time = time.time()
-        elapsed = current_time - self.animation_start_time
-        
+        # Use per-phase durations and easing for a synchronized animation
         if self.animation_phase == 0:
-            # Phase 1: Ramp up from 0 to 100% over 2 seconds
-            if elapsed < 2.0:
-                progress = elapsed / 2.0  # 0.0 to 1.0
-                throttle_value = progress  # 0.0 to 1.0
-                tune_value = progress     # 0.0 to 1.0
-                
-                # Apply smooth easing (ease-out)
-                throttle_value = 1 - (1 - throttle_value) ** 3
-                tune_value = 1 - (1 - tune_value) ** 3
-                rpm_eased = 1 - (1 - progress) ** 3
-                speed_eased = 1 - (1 - progress) ** 3
-                
-                # Update all the gauges
-                self.setThrottle(throttle_value)
-                # Only animate the currently active right bar mode
-                if self.right_bar_mode == "engine":
-                    self.setEnginetune(tune_value)
-                else:
-                    self.setRegenBrake(tune_value)
-                self.setRPM(rpm_eased * MAX_RPM)
-                self.setSpeed(speed_eased * 60)
+            # Phase 0: ramp-up (0 -> 1) over 2.0 seconds
+            ramp_duration = 2.0
+            elapsed = current_time - self.animation_start_time
+            if elapsed < ramp_duration:
+                raw = elapsed / ramp_duration
+                # ease-out cubic for a smooth ramp
+                self.animation_progress = 1 - (1 - raw) ** 3
             else:
-                # Move to phase 2
+                self.animation_progress = 1.0
+                # move to hold/oscillate phase
                 self.animation_phase = 1
-                self.animation_start_time = current_time  # Reset timer for phase 2
-                
+                self.animation_start_time = current_time
+
         elif self.animation_phase == 1:
-            # Phase 2: Oscillate between 80-100% for 4 seconds
-            if elapsed < 4.0:
-                # Create oscillation between 0.8 and 1.0
-                oscillation_frequency = 2.0  # 2 cycles per second
-                sine_wave = math.sin(elapsed * oscillation_frequency * 2 * math.pi)
-                
-                # Map sine wave (-1 to 1) to range (0.8 to 1.0)
-                base_value = 0.9  # Center point
-                amplitude = 0.1   # ±10% oscillation
-                throttle_value = base_value + (sine_wave * amplitude)
-                tune_value = base_value + (sine_wave * amplitude * 0.8)  # Slightly different for variety
-                
-                # RPM and Speed oscillation (slightly different frequencies for variety)
-                rpm_sine = math.sin(elapsed * 1.8 * 2 * math.pi)  # Slightly different frequency
-                speed_sine = math.sin(elapsed * 2.2 * 2 * math.pi)  # Different frequency
-                
-                rpm_oscillation = base_value + (rpm_sine * amplitude * 0.9)
-                speed_oscillation = base_value + (speed_sine * amplitude * 0.7)
-                
-                # Update all gauges
-                self.setThrottle(throttle_value)
-                self.setTune(tune_value)
-                self.setRPM(rpm_oscillation * MAX_RPM)
-                self.setSpeed(speed_oscillation * 60)
+            # Phase 1: hold with small oscillation around 0.9-1.0 for 4.0 seconds
+            hold_duration = 4.0
+            elapsed = current_time - self.animation_start_time
+            if elapsed < hold_duration:
+                # Small synchronized oscillation applied to the progress value
+                base = 0.95
+                amplitude = 0.05
+                freq = 2.0  # cycles per second
+                sine = math.sin(elapsed * freq * 2 * math.pi)
+                self.animation_progress = base + (sine * amplitude)
             else:
-                # Animation complete
+                # Move to ramp-down phase
+                self.animation_phase = 2
+                self.animation_start_time = current_time
+
+        elif self.animation_phase == 2:
+            # Phase 2: ramp-down (current progress -> 0) over 1.5 seconds smoothly
+            down_duration = 1.5
+            elapsed = current_time - self.animation_start_time
+            if elapsed < down_duration:
+                raw = elapsed / down_duration
+                # ease-in cubic for smooth deceleration
+                down_progress = 1 - (1 - raw) ** 3
+                # interpolate from  current (should be near 1) down to 0
+                start_val = 1.0
+                self.animation_progress = start_val * (1.0 - down_progress)
+            else:
+                # Animation fully complete
+                self.animation_progress = 0.0
                 self.end_startup_animation()
+
+        # Clamp for safety
+        self.animation_progress = max(0.0, min(1.0, self.animation_progress))
+
+        # Apply the single synchronized progress value to all related widgets
+        throttle_value = self.animation_progress
+        tune_value = self.animation_progress
+        rpm_value = self.animation_progress * MAX_RPM
+        speed_value = self.animation_progress * 60
+
+        # Update gauges consistently
+        self.setThrottle(throttle_value)
+        # Update both engine tune and regen brake values but only display the active one
+        self.setEnginetune(tune_value)
+        self.setRegenBrake(tune_value)
+        self.setRPM(rpm_value)
+        self.setSpeed(speed_value)
     
     def end_startup_animation(self):
         """End the startup animation and return to normal operation."""
-        self.startup_timer.stop()
+        # Stop the animation timer and mark animation inactive
+        if self.startup_timer.isActive():
+            self.startup_timer.stop()
         self.startup_animation_active = False
-        
-        # Reset all gauges to default values
+
+        # Ensure values are fully reset to zero in a smooth, consistent manner
         self.setThrottle(0.0)
         self.setEnginetune(0.0)
         self.setRegenBrake(0.0)
         self.setRPM(0.0)
         self.setSpeed(0.0)
-        
+
         print("Startup animation complete!")
 
-        # INFO: TIMER STARTED HERE
         # Start data timer AFTER window is shown and ready
-        self.data_timer.start(UPDATE_MS)
+        # If it isn't already running, start it now
+        if not self.data_timer.isActive():
+            self.data_timer.start(UPDATE_MS)
     
     def is_animation_active(self):
         """Check if startup animation is currently running."""

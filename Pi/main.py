@@ -4,7 +4,6 @@ import os
 import platform
 from PySide6.QtCore import QCoreApplication, QThread
 import ui.dashboard as dash
-from workers import AudioWorker, HardwareWorker
 
 def _print_startup_info() -> None:
     print(f"[Main] Python {platform.python_version()} on {platform.platform()}")
@@ -19,6 +18,9 @@ def _install_signal_handlers(app: QCoreApplication) -> None:
     signal.signal(signal.SIGTERM, _handle_signal)
 
 def boot() -> None:
+    #IMPORT HERE SO THAT IF UI TEST IS RUN, THESE ARE NOT IMPORTED
+    from workers import AudioWorker, HardwareWorker
+
     _print_startup_info()
 
     dashboard = dash.F1Dashboard("ui/dashboard_settings.ini")
@@ -73,5 +75,5 @@ def ui_test() -> None:
     sys.exit(exit_code)
 
 if __name__ == "__main__":
-    boot()
-    #ui_test()
+    #boot()
+    ui_test()
