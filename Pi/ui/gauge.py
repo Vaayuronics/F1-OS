@@ -230,7 +230,7 @@ class GaugeWidget(QWidget):
     def _drawThrottleArc(self, painter):
         """Draw a throttle arc beneath the RPM arc as a curved bar with gradient colors"""
         painter.save()
-        painter.setRenderHint(QPainter.Antialiasing, False)
+        painter.setRenderHint(QPainter.Antialiasing, True)
 
         geom = self._geom
         start_angle = geom["start_angle"]
@@ -316,7 +316,7 @@ class GaugeWidget(QWidget):
     
     def _drawValueArc(self, painter):
         """Draw the value arc (RPM) on the gauge."""
-        painter.setRenderHint(QPainter.Antialiasing, False)
+        painter.setRenderHint(QPainter.Antialiasing, True)
 
         progress = self.current_value / self.max_value if self.max_value > 0 else 0
         progress = max(0.0, min(1.0, progress))
