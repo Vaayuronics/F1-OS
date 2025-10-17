@@ -24,6 +24,7 @@ def boot() -> None:
     _print_startup_info()
 
     dashboard = dash.F1Dashboard("ui/dashboard_settings.ini")
+    dashboard.enable_fullscreen()
 
     hardware_thread = QThread()
     audio_thread = QThread()
