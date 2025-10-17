@@ -162,10 +162,13 @@ class EngineAudioPlayer:
                     chunk = self.buffer.get_nowait()
                 elif self.buffer.empty():
                     self.playback_started = False  # Pause playback if buffer is empty
-            
-            print(f"Writing chunk {time.strftime('%M:%S')}")
+
             if chunk is not None:
                 self.stream.write(chunk)
+
+            time.sleep(0)  # Yield to other threads, go to back of ready queue
+            # This is best if the function is called withing a while loop on another thread.
+            # Prevents lag by hogging cpu cycles, and increasing time slice by OS scheduler
                 
         except Exception as e:
             print(f"Error in audio playback: {e}")
