@@ -1,7 +1,6 @@
 from PySide6.QtWidgets import (QMainWindow, QFrame, QSplitter, 
-                              QSizePolicy, QWidget, QVBoxLayout, QLabel, QHBoxLayout, QApplication, QScrollArea)
+                              QSizePolicy, QWidget, QVBoxLayout, QLabel, QApplication, QScrollArea)
 from PySide6.QtCore import Qt, QSettings, QSize, QTimer, Slot
-from PySide6.QtGui import QFont
 from ui.gauge import GaugeWidget
 from ui.car2d import Car2DWidget
 from ui.battery_gauge import BatteryGaugeWidget
@@ -559,9 +558,7 @@ class F1Dashboard(QMainWindow):
     def getRightBarMode(self):
         """Get the current right bar mode ('engine' or 'regen')."""
         return self.right_bar_mode
-    
-
-    
+        
     def setWheelRotation(self, angle_degrees):
         """Set the wheel rotation angle in degrees."""
         self.car_widget.setWheelAngle(angle_degrees)
@@ -725,12 +722,12 @@ class F1Dashboard(QMainWindow):
         
         return False  # Failed to load
     
-
-    
     def closeEvent(self, event):
         """Override close event to stop timers, clear gauges, and save layout.""" 
         self._perform_shutdown_cleanup()
         self.save_splitter_settings()
+        #TODO: Save bottom splitter settings as well
+        #TODO: Fix workers not stoppping
         super().closeEvent(event)
 
     def _perform_shutdown_cleanup(self):

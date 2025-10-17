@@ -2,7 +2,7 @@ import sys
 import signal
 import os
 import platform
-from PySide6.QtCore import QCoreApplication, QThread
+from PySide6.QtCore import QCoreApplication, QThread, QMetaObject, Qt
 import ui.dashboard as dash
 
 def _print_startup_info() -> None:
@@ -49,10 +49,29 @@ def boot() -> None:
     audio_worker.status.connect(lambda msg: print(f"[Audio] {msg}"))
     audio_worker.error.connect(lambda msg: print(f"[Audio] ERROR: {msg}"))
 
-    dashboard.app.aboutToQuit.connect(hardware_worker.stop)
-    dashboard.app.aboutToQuit.connect(audio_worker.stop)
-    dashboard.app.aboutToQuit.connect(hardware_thread.quit)
-    dashboard.app.aboutToQuit.connect(audio_thread.quit)
+    # Ensure workers are stopped on their own threads BEFORE we quit those threads.
+    # Use BlockingQueuedConnection so the call is executed in the worker thread
+    # and the main thread waits for completion. This avoids losing queued stop
+    # events if thread.quit() is triggered first.
+    def _stop_worker_and_quit_thread(worker, thread, name="worker"):
+        def _handler():
+            try:
+                print(f"[Main] aboutToQuit: stopping {name}...")
+                # Invoke stop on the worker on its thread and block until done
+                QMetaObject.invokeMethod(worker, "stop", Qt.BlockingQueuedConnection)
+            except Exception as exc:
+                print(f"[Main] Failed to stop {name}: {exc}")
+            try:
+                print(f"[Main] aboutToQuit: quitting {name} thread...")
+                thread.quit()
+                # Wait a short time for clean shutdown; will block the main thread
+                thread.wait(2000)
+            except Exception as exc:
+                print(f"[Main] Failed to quit {name} thread: {exc}")
+        return _handler
+
+    dashboard.app.aboutToQuit.connect(_stop_worker_and_quit_thread(hardware_worker, hardware_thread, "hardware"))
+    dashboard.app.aboutToQuit.connect(_stop_worker_and_quit_thread(audio_worker, audio_thread, "audio"))
 
     hardware_thread.start()
     audio_thread.start()
